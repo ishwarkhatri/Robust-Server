@@ -29,34 +29,15 @@ import com.my.twopc.participant.store.Participant;
 public class CoordinatorImpl implements Iface {
 
 	private Connection connection;
-	private List<Participant.Client> participantList;
+	private List<ReplicaInfo> participantList;
 	private boolean isConnectionAvailable;
 	private Lock connectionLock = new ReentrantLock();
 	private Condition condition = connectionLock.newCondition();
 
 	public CoordinatorImpl(List<ReplicaInfo> replicaList) {
-		//Create connection to all participants/replicas
-		connectToParticipants(replicaList);
-
 		//Initialize the state of co-ordinator
 		//Recover from failure if any, check for incomplete requests
 		init();
-	}
-
-	private void connectToParticipants(List<ReplicaInfo> replicaList) {
-		for(ReplicaInfo r : replicaList) {
-			try {
-				TTransport transport = new TSocket(r.getHostname(), r.getPortno());
-				transport.open();
-				
-				TProtocol protocol = new TBinaryProtocol(transport);
-				Participant.Client client = new Participant.Client(protocol);
-				
-				participantList.add(client);
-			}catch(Exception oops) {
-				printError(oops, true);
-			}
-		}
 	}
 
 	private void init() {
@@ -79,20 +60,14 @@ public class CoordinatorImpl implements Iface {
 			//Fetch records for which voting was not finished
 			ResultSet rs = statement.executeQuery(Constants.COORDINATOR_UNFINISHED_VOTING_RECORDS_QUERY);
 			while(rs.next()) {
-				String fileName = rs.getString("FILE_NAME");
-				
-				//Redo voting for this file
-				redoVotingFor(fileName);
+				String status = rs.getString("STATUS");
+
+				//Switch case based on status
 			}
 			statement.close();
 		}catch(Exception oops) {
 			printError(oops, true);
 		}
-	}
-
-	private void redoVotingFor(String fileName) {
-		// TODO Auto-generated method stub
-		
 	}
 
 	private void createTransactionLogTable() {
@@ -126,19 +101,19 @@ public class CoordinatorImpl implements Iface {
 		sendWriteRequestToParticipants(rFile);
 
 		//Update the transaction status from INCOMING to VOTING_STARTED
-		updateTransaction(rFile.getTid(), COOD_TRANS_STATUS.VOTING_STARTED);
+		updateTransaction(rFile.getTid(), Constants.COOD_TRANS_UPDATE_STATUS_QUERY, COOD_TRANS_STATUS.VOTING_STARTED);
 
 		//Do voting
 		COOD_TRANS_STATUS finalDecision = getDecisionVotesFromParticipants(rFile.getTid());
 
-		//Update the transaction status from VOTING_STARTED to VOTING_FINISHED 
-		updateTransaction(rFile.getTid(), COOD_TRANS_STATUS.VOTING_FINISHED);
+		//Update final decision either COMMIT or ABORT 
+		updateTransaction(rFile.getTid(), Constants.COOD_TRANS_UPDATE_DECISION_QUERY, finalDecision);
 
 		//Based on voting results send COMMIT/ABORT
 		sendFinalDecisionToAllParticipants(rFile.getTid(), finalDecision);
 
 		//Update final voting result in transaction table
-		updateTransaction(rFile.getTid(), finalDecision);
+		updateTransaction(rFile.getTid(), Constants.COOD_TRANS_UPDATE_STATUS_QUERY, COOD_TRANS_STATUS.REQUEST_PROCESSED);
 
 		if(finalDecision == COOD_TRANS_STATUS.COMMITED)
 			return new StatusReport(Status.SUCCESSFUL);
@@ -149,13 +124,20 @@ public class CoordinatorImpl implements Iface {
 	}
 
 	private void sendFinalDecisionToAllParticipants(int tId, COOD_TRANS_STATUS finalDecision) {
-		for(Participant.Client client : participantList) {
+		for(ReplicaInfo replica : participantList) {
 			//Create separate thread for sending decisions to save time
 			new Thread(new Runnable() {
 				
 				@Override
 				public void run() {
 					try {
+						//Connect to the participant
+						TTransport transport = new TSocket(replica.getHostname(), replica.getPortno());
+						transport.open();
+						
+						TProtocol protocol = new TBinaryProtocol(transport);
+						Participant.Client client = new Participant.Client(protocol);
+
 						//Depending on the final decision send either commit or abort
 						if(finalDecision == COOD_TRANS_STATUS.ABORTED)
 							client.abort(tId);
@@ -173,8 +155,15 @@ public class CoordinatorImpl implements Iface {
 	private COOD_TRANS_STATUS getDecisionVotesFromParticipants(int tId) {
 		boolean isAborted = false;
 		//Get votes from all participants/replicas
-		for(Participant.Client client : participantList) {
+		for(ReplicaInfo replica : participantList) {
 			try {
+				//Connect to the participant
+				TTransport transport = new TSocket(replica.getHostname(), replica.getPortno());
+				transport.open();
+				
+				TProtocol protocol = new TBinaryProtocol(transport);
+				Participant.Client client = new Participant.Client(protocol);
+
 				//Get decision on particular transaction id which is unique
 				String decision = client.vote(tId);
 
@@ -201,14 +190,14 @@ public class CoordinatorImpl implements Iface {
 	 * @param tId Transaction id to identify a record
 	 * @param newStatus New status to be updated
 	 */
-	private void updateTransaction(int tId, COOD_TRANS_STATUS newStatus) {
+	private void updateTransaction(int tId, String updateQuery, COOD_TRANS_STATUS newStatus) {
 		connectionLock.lock(); //do not forget to unlock this in finally
 		try {
 			while(!isConnectionAvailable)
 				condition.await();
 			
 			isConnectionAvailable = false;
-			PreparedStatement ps = connection.prepareStatement(Constants.COOD_TRANS_UPDATE_QUERY);
+			PreparedStatement ps = connection.prepareStatement(updateQuery);
 			ps.setString(1, newStatus.getValue());
 			ps.setInt(2, tId);
 
@@ -232,12 +221,19 @@ public class CoordinatorImpl implements Iface {
 	 * This way each participant will start working on request concurrently
 	 */
 	private void sendWriteRequestToParticipants(RFile rFile) {
-		for(Participant.Client client : participantList) {
+		for(ReplicaInfo replica : participantList) {
 			new Thread(new Runnable() {
 				
 				@Override
 				public void run() {
 					try {
+						//Connect to the participant
+						TTransport transport = new TSocket(replica.getHostname(), replica.getPortno());
+						transport.open();
+						
+						TProtocol protocol = new TBinaryProtocol(transport);
+						Participant.Client client = new Participant.Client(protocol);
+
 						//Send write request to participant
 						client.writeToFile(rFile);
 						
@@ -286,8 +282,15 @@ public class CoordinatorImpl implements Iface {
 
 	@Override
 	public RFile readFile(String filename) throws SystemException, TException {
-		for(Participant.Client client : participantList) {
+		for(ReplicaInfo replica : participantList) {
 			try {
+				//Connect to the participant
+				TTransport transport = new TSocket(replica.getHostname(), replica.getPortno());
+				transport.open();
+				
+				TProtocol protocol = new TBinaryProtocol(transport);
+				Participant.Client client = new Participant.Client(protocol);
+
 				//Try to connect to this replica and read file
 				RFile file = client.readFromFile(filename);
 				return file;
