@@ -1,30 +1,21 @@
 package com.my.twopc.file.store.impl;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.Statement;
-import java.util.List;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
-
+import com.my.twopc.common.Constants;
+import com.my.twopc.custom.exception.SystemException;
+import com.my.twopc.file.store.FileStore.Iface;
+import com.my.twopc.model.*;
+import com.my.twopc.participant.store.Participant;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 
-import com.my.twopc.common.Constants;
-import com.my.twopc.custom.exception.SystemException;
-import com.my.twopc.file.store.FileStore.Iface;
-import com.my.twopc.model.COOD_TRANS_STATUS;
-import com.my.twopc.model.RFile;
-import com.my.twopc.model.ReplicaInfo;
-import com.my.twopc.model.Status;
-import com.my.twopc.model.StatusReport;
-import com.my.twopc.participant.store.Participant;
+import java.sql.*;
+import java.util.List;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class CoordinatorImpl implements Iface {
 
@@ -62,7 +53,62 @@ public class CoordinatorImpl implements Iface {
 			while(rs.next()) {
 				String status = rs.getString("STATUS");
 
+				// Create RFile from table
+				RFile rFile = new RFile();
+				rFile.setFilename(rs.getString("FILE_NAME"));
+				rFile.setContent(rs.getString("FILE_CONTENT"));
+
+				COOD_TRANS_STATUS finalDecision;
+
 				//Switch case based on status
+				switch (status) {
+					case "INCOMING":
+						//Send write request to all replicas/participants
+						sendWriteRequestToParticipants(rFile);
+
+						//Update the transaction status from INCOMING to VOTING_STARTED
+						updateTransaction(rFile.getTid(), Constants.COOD_TRANS_UPDATE_STATUS_QUERY, COOD_TRANS_STATUS.VOTING_STARTED);
+
+						//Do voting
+						finalDecision = getDecisionVotesFromParticipants(rFile.getTid());
+
+						//Update final decision either COMMIT or ABORT
+						updateTransaction(rFile.getTid(), Constants.COOD_TRANS_UPDATE_DECISION_QUERY, finalDecision);
+
+						//Based on voting results send COMMIT/ABORT
+						sendFinalDecisionToAllParticipants(rFile.getTid(), finalDecision);
+
+						//Update final voting result in transaction table
+						updateTransaction(rFile.getTid(), Constants.COOD_TRANS_UPDATE_STATUS_QUERY, COOD_TRANS_STATUS.REQUEST_PROCESSED);
+
+						break;
+
+					case "VOTING_STARTED":
+						//Do voting
+						finalDecision = getDecisionVotesFromParticipants(rFile.getTid());
+
+						//Update final decision either COMMIT or ABORT
+						updateTransaction(rFile.getTid(), Constants.COOD_TRANS_UPDATE_DECISION_QUERY, finalDecision);
+
+						//Based on voting results send COMMIT/ABORT
+						sendFinalDecisionToAllParticipants(rFile.getTid(), finalDecision);
+
+						//Update final voting result in transaction table
+						updateTransaction(rFile.getTid(), Constants.COOD_TRANS_UPDATE_STATUS_QUERY, COOD_TRANS_STATUS.REQUEST_PROCESSED);
+						break;
+
+					case "COMMITTED":
+					case "ABORTED":
+						finalDecision = COOD_TRANS_STATUS.getEnum(rs.getString("FINAL_DECISION"));
+
+						//Based on voting results send COMMIT/ABORT
+						sendFinalDecisionToAllParticipants(rFile.getTid(), finalDecision);
+
+						//Update final voting result in transaction table
+						updateTransaction(rFile.getTid(), Constants.COOD_TRANS_UPDATE_STATUS_QUERY, COOD_TRANS_STATUS.REQUEST_PROCESSED);
+
+						break;
+				}
 			}
 			statement.close();
 		}catch(Exception oops) {
