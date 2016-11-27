@@ -11,9 +11,11 @@ public class Constants {
 																	+ " (TID INTEGER PRIMARY KEY AUTOINCREMENT,"
 																	+ " FILE_NAME CHAR(50),"
 																	+ " FILE_CONTENT TEXT,"
-																	+ " STATUS CHAR(50))";
-	public static final String COORDINATOR_UNFINISHED_VOTING_RECORDS_QUERY = "SELECT * FROM " + COOD_TRANS_TABLE + " where STATUS = \"" + COOD_TRANS_STATUS.VOTING_STARTED.getValue() + "\";";
+																	+ " STATUS CHAR(50))"
+																	+ " FINAL_DECISION CHAR(50)";
+	public static final String COORDINATOR_UNFINISHED_VOTING_RECORDS_QUERY = "SELECT * FROM " + COOD_TRANS_TABLE + " where STATUS <> \"" + COOD_TRANS_STATUS.REQUEST_PROCESSED.getValue() + "\";";
 	public static final String COOD_TRANS_INSERT_QUERY = "INSERT INTO " + COOD_TRANS_TABLE + " (FILE_NAME, FILE_CONTENT, STATUS) VALUES (?, ?, ?);";
-	public static final String COOD_TRANS_UPDATE_QUERY = "UPDATE " + COOD_TRANS_TABLE + " SET STATUS = ? WHERE TID = ?";
+	public static final String COOD_TRANS_UPDATE_STATUS_QUERY = "UPDATE " + COOD_TRANS_TABLE + " SET STATUS = ? WHERE TID = ?";
+	public static final String COOD_TRANS_UPDATE_DECISION_QUERY = "UPDATE " + COOD_TRANS_TABLE + " SET FINAL_DECISION = ? WHERE TID = ?";
 	
 }
