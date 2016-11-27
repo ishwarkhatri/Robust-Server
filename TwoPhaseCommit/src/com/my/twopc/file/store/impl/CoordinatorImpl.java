@@ -115,7 +115,7 @@ public class CoordinatorImpl implements Iface {
 		//Update final voting result in transaction table
 		updateTransaction(rFile.getTid(), Constants.COOD_TRANS_UPDATE_STATUS_QUERY, COOD_TRANS_STATUS.REQUEST_PROCESSED);
 
-		if(finalDecision == COOD_TRANS_STATUS.COMMITED)
+		if(finalDecision == COOD_TRANS_STATUS.COMMITTED)
 			return new StatusReport(Status.SUCCESSFUL);
 
 		StatusReport status = new StatusReport(Status.FAILED);
@@ -141,7 +141,7 @@ public class CoordinatorImpl implements Iface {
 						//Depending on the final decision send either commit or abort
 						if(finalDecision == COOD_TRANS_STATUS.ABORTED)
 							client.abort(tId);
-						else if(finalDecision == COOD_TRANS_STATUS.COMMITED)
+						else if(finalDecision == COOD_TRANS_STATUS.COMMITTED)
 							client.commit(tId);
 
 					}catch(Exception oops) {
@@ -182,7 +182,7 @@ public class CoordinatorImpl implements Iface {
 		if(isAborted)
 			return COOD_TRANS_STATUS.ABORTED;
 
-		return COOD_TRANS_STATUS.COMMITED;
+		return COOD_TRANS_STATUS.COMMITTED;
 	}
 
 	/**
