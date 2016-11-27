@@ -17,5 +17,9 @@ public class Constants {
 	public static final String COOD_TRANS_INSERT_QUERY = "INSERT INTO " + COOD_TRANS_TABLE + " (FILE_NAME, FILE_CONTENT, STATUS) VALUES (?, ?, ?);";
 	public static final String COOD_TRANS_UPDATE_STATUS_QUERY = "UPDATE " + COOD_TRANS_TABLE + " SET STATUS = ? WHERE TID = ?";
 	public static final String COOD_TRANS_UPDATE_DECISION_QUERY = "UPDATE " + COOD_TRANS_TABLE + " SET FINAL_DECISION = ? WHERE TID = ?";
-	
+
+	public static final String STATUS_INCOMING = "INCOMING";
+	public static final String STATUS_STARTED = "VOTING_STARTED";
+	public static final String STATUS_COMMITTED = "COMMITTED";
+	public static final String STATUS_ABORTED = "ABORTED";
 }
