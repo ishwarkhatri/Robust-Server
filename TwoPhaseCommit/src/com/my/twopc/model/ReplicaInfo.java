@@ -2,6 +2,11 @@ package com.my.twopc.model;
 
 public class ReplicaInfo {
 
+	public ReplicaInfo(String hostname, int portno) {
+		this.hostname = hostname;
+		this.portno = portno;
+	}
+
 	private String hostname;
 	private int portno;
 
