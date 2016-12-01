@@ -1,6 +1,5 @@
 package com.my.twopc.file.store;
 
-import com.my.twopc.file.store.FileStore.Iface;
 import com.my.twopc.file.store.impl.CoordinatorImpl;
 import com.my.twopc.model.ReplicaInfo;
 import org.apache.thrift.server.TServer;
@@ -17,7 +16,7 @@ public class CoordinatorServer {
 
     private static CoordinatorImpl handler;
 
-    private static FileStore.Processor<Iface> processor;
+    private static FileStore.Processor processor;
 
     private static int port;
 
@@ -39,7 +38,7 @@ public class CoordinatorServer {
 
         try {
             handler = new CoordinatorImpl(participantList);
-            processor = new FileStore.Processor<Iface>(handler);
+            processor = new FileStore.Processor(handler);
             port= Integer.valueOf(args[0]);
 
             Runnable simple = new Runnable() {
@@ -75,7 +74,7 @@ public class CoordinatorServer {
         }
     }
 
-    private static void simple(FileStore.Processor<Iface> processor) {
+    private static void simple(FileStore.Processor processor) {
         try {
             TServerTransport serverTransport = new TServerSocket(port);
             TServer server = new TThreadPoolServer(new TThreadPoolServer.Args(serverTransport).processor(processor));
