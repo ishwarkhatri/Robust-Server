@@ -1,45 +1,30 @@
 package com.my.twopc.file.store;
 
-import com.my.twopc.file.store.impl.CoordinatorImpl;
-import com.my.twopc.model.ReplicaInfo;
-import org.apache.thrift.server.TServer;
-import org.apache.thrift.server.TThreadPoolServer;
-import org.apache.thrift.transport.TServerSocket;
-import org.apache.thrift.transport.TServerTransport;
-
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
+import org.apache.thrift.server.TServer;
+import org.apache.thrift.server.TThreadPoolServer;
+import org.apache.thrift.transport.TServerSocket;
+import org.apache.thrift.transport.TServerTransport;
+
+import com.my.twopc.file.store.FileStore.Iface;
+import com.my.twopc.file.store.impl.CoordinatorImpl;
+import com.my.twopc.model.ReplicaInfo;
+
 public class CoordinatorServer {
-
-    private static CoordinatorImpl handler;
-
-    private static FileStore.Processor processor;
-
-    private static int port;
-
-    private static List<ReplicaInfo> participantList = new ArrayList<>();
 
     private static final int NUM_REPLICAS = 3;
 
     public static void main(String[] args) {
-        if (args.length < 1) {
-            System.out.println("Please enter port number.");
-            System.exit(1);
-        }
-
-        Scanner sc = new Scanner(System.in);
-
         // Get hostname and port number from user
-        getReplicaInfoFromUser(sc);
-        sc.close();
+        List<ReplicaInfo> participantList = getReplicaInfoFromUser();
 
         try {
-            handler = new CoordinatorImpl(participantList);
-            processor = new FileStore.Processor(handler);
-            port= Integer.valueOf(args[0]);
+        	CoordinatorImpl handler = new CoordinatorImpl(participantList);
+            FileStore.Processor<Iface> processor = new FileStore.Processor<Iface>(handler);
 
             Runnable simple = new Runnable() {
                 public void run() {
@@ -56,31 +41,38 @@ public class CoordinatorServer {
 
     }
 
-    private static void getReplicaInfoFromUser(Scanner sc) {
+    private static List<ReplicaInfo> getReplicaInfoFromUser() {
+    	Scanner sc = new Scanner(System.in);
         ReplicaInfo replica;
         String hostname;
         int portNumber;
+        List<ReplicaInfo> participantList = new ArrayList<>();
 
         System.out.println("Please enter details for the 3 participants.");
-
         for (int i = 0; i < NUM_REPLICAS; i++) {
-            System.out.println("Enter hostname and port number for participant " + i + 1);
-            hostname = sc.next();
-            sc.nextLine();
-            portNumber = sc.nextInt();
+        	System.out.println("Enter hostname and port number for participant " + (i + 1));
+        	System.out.print("Host name: ");
+            hostname = sc.nextLine();
+            
+            System.out.print("Port no.: ");
+            portNumber = Integer.parseInt(sc.nextLine());
 
             replica = new ReplicaInfo(hostname, portNumber);
             participantList.add(replica);
+
         }
+        
+        sc.close();
+
+        return participantList;
     }
 
-    private static void simple(FileStore.Processor processor) {
+    private static void simple(final FileStore.Processor<Iface> processor) {
         try {
-            TServerTransport serverTransport = new TServerSocket(port);
+            TServerTransport serverTransport = new TServerSocket(0);
             TServer server = new TThreadPoolServer(new TThreadPoolServer.Args(serverTransport).processor(processor));
 
             System.out.println("Server address: " + InetAddress.getLocalHost().getHostName());
-            System.out.println("Port: " + port);
             server.serve();
         } catch (Exception e) {
             System.out.println(e.getMessage());
