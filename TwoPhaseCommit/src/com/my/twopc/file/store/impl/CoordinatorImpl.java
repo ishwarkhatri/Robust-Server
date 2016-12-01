@@ -214,7 +214,7 @@ public class CoordinatorImpl implements Iface {
 				String decision = client.vote(tId);
 
 				//If decision is abort for any participant then abort
-				if(COOD_TRANS_STATUS.ABORTED.getValue().equalsIgnoreCase(decision)) {
+				if(PARTICIPANT_TRANS_STATUS.ABORTED.getValue().equalsIgnoreCase(decision)) {
 					isAborted = true;
 					break;
 				}
