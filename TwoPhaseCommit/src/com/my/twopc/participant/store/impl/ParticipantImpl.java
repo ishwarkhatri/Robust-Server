@@ -24,6 +24,8 @@ public class ParticipantImpl implements Iface {
 	private Connection connection;
 	private static final Lock FILE_LOCK = new ReentrantLock();
 	private static final Set<String> LOCKED_FILES = new HashSet<>();
+	private static final Condition LOCK_CONDITION = FILE_LOCK.newCondition();
+	private static boolean isSetAvailable = true;
 
 	public ParticipantImpl() {
 		initParticipant();
@@ -85,7 +87,7 @@ public class ParticipantImpl implements Iface {
 	public StatusReport writeToFile(RFile rFile) throws SystemException, TException {
 		//TODO write to file method
 		if(isFileLocked(rFile.getFilename())) {
-			//Throw error
+			//Add entry in TEMP table with PARTICIPANT status as ABORTED
 		} else {
 			//Acquire lock
 			
@@ -100,8 +102,28 @@ public class ParticipantImpl implements Iface {
 	}
 
 	private boolean isFileLocked(String filename) {
-		// TODO File locking mechanism
-		return false;
+		boolean isLocked = false;
+		FILE_LOCK.lock();
+		try {
+			while(!isSetAvailable) {
+				try {
+					LOCK_CONDITION.await();
+				}catch(InterruptedException oops) {}
+			}
+			
+			isSetAvailable = false;
+			
+			if(LOCKED_FILES.contains(filename))
+				isLocked = true;
+			
+			isSetAvailable = true;
+			
+			LOCK_CONDITION.signal();
+		}finally {
+			FILE_LOCK.unlock();
+		}
+
+		return isLocked;
 	}
 
 	@Override
