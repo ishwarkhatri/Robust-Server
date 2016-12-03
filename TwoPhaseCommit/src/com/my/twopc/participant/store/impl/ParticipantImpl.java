@@ -1,25 +1,19 @@
 package com.my.twopc.participant.store.impl;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
-
-import org.apache.thrift.TException;
-
 import com.my.twopc.common.Constants;
 import com.my.twopc.custom.exception.SystemException;
 import com.my.twopc.model.PARTICIPANT_TRANS_STATUS;
 import com.my.twopc.model.RFile;
 import com.my.twopc.model.StatusReport;
 import com.my.twopc.participant.store.Participant.Iface;
+import org.apache.thrift.TException;
+
+import java.sql.*;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class ParticipantImpl implements Iface {
 
@@ -225,11 +219,60 @@ public class ParticipantImpl implements Iface {
 	@Override
 	public boolean commit(int tid) throws SystemException, TException {
 		//TODO COMMIT
-		//First move file name and content from TEMP table to PERMEMANT table
-		//Update status for tid in TEMP table to COMMITTED
+		boolean isCommitted = false;
+		String fileName = "";
+		String content = "";
+
+		// Acquire lock on file
+		connectionLock.lock();
+
+		try {
+			while (!isConnectionAvailable)
+				connectionCondition.await();
+
+			isConnectionAvailable = true;
+			//First move file name and content from TEMP table to PERMEMANT table
+			PreparedStatement psRead = connection.prepareStatement(Constants.PARTICIPANT_TMP_TABLE_READ_QUERY);
+			psRead.setInt(1, tid);
+
+			ResultSet rs = psRead.executeQuery();
+			if (rs.next()) {
+				fileName = rs.getString("FILE_NAME");
+				content = rs.getString("FILE_CONTENT");
+			}
+			connection.commit();
+
+			PreparedStatement psWrite = connection.prepareStatement(Constants.PARTICIPANT_PR_INSERT_QUERY);
+			psWrite.setString(1, fileName);
+			psWrite.setString(2, content);
+			psWrite.executeUpdate();
+			connection.commit();
+
+			//Update status for tid in TEMP table to COMMITTED
+			PreparedStatement ps = connection.prepareStatement(Constants.PARTICIPANT_TMP_FINAL_STATUS_UPDATE_QUERY);
+			ps.setInt(1, tid);
+
+			ps.executeUpdate();
+			connection.commit();
+
+			//Update the condition variable
+			isConnectionAvailable = true;
+			//Signal another waiting thread
+			connectionCondition.signal();
+
+
+			//if above steps done successfully then return true
+			isCommitted = true;
+			//else return false
+		} catch (Exception oops) {
+			printError(oops, true);
+		}finally {
+			// Release the acquired lock
+			connectionLock.unlock();
+		}
 		//Release lock on file that was acquired in writeFile method
-		//if above steps done successfully then return true
-		//else return false
+		if (isCommitted && releaseLock(fileName))
+			return true;
 		return false;
 	}
 
