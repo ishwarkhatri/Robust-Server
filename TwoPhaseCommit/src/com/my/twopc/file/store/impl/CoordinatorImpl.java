@@ -21,7 +21,7 @@ public class CoordinatorImpl implements Iface {
 
 	private Connection connection;
 	private List<ReplicaInfo> participantList;
-	private boolean isConnectionAvailable;
+	private boolean isConnectionAvailable = true;
 	private Lock connectionLock = new ReentrantLock();
 	private Condition condition = connectionLock.newCondition();
 
@@ -214,7 +214,7 @@ public class CoordinatorImpl implements Iface {
 				String decision = client.vote(tId);
 
 				//If decision is abort for any participant then abort
-				if(PARTICIPANT_TRANS_STATUS.ABORTED.getValue().equalsIgnoreCase(decision)) {
+				if(PARTICIPANT_TRANS_STATUS.FAILURE.getValue().equalsIgnoreCase(decision)) {
 					isAborted = true;
 					break;
 				}
