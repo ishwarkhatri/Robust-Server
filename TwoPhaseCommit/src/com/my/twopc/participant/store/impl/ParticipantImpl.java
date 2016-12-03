@@ -1,27 +1,39 @@
 package com.my.twopc.participant.store.impl;
 
-import com.my.twopc.common.Constants;
-import com.my.twopc.custom.exception.SystemException;
-import com.my.twopc.model.PARTICIPANT_TRANS_STATUS;
-import com.my.twopc.model.RFile;
-import com.my.twopc.model.StatusReport;
-import com.my.twopc.participant.store.Participant.Iface;
-import org.apache.thrift.TException;
-
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+import org.apache.thrift.TException;
+
+import com.my.twopc.common.Constants;
+import com.my.twopc.custom.exception.SystemException;
+import com.my.twopc.model.PARTICIPANT_TRANS_STATUS;
+import com.my.twopc.model.RFile;
+import com.my.twopc.model.StatusReport;
+import com.my.twopc.participant.store.Participant.Iface;
+
 public class ParticipantImpl implements Iface {
 
+	//Variables related to database connection
 	private Connection connection;
-	private static final Lock FILE_LOCK = new ReentrantLock();
-	private static final Set<String> LOCKED_FILES = new HashSet<>();
-	private static final Condition LOCK_CONDITION = FILE_LOCK.newCondition();
-	private static boolean isSetAvailable = true;
+	private boolean isConnectionAvailable;
+	private Lock connectionLock = new ReentrantLock();
+	private Condition condition = connectionLock.newCondition();
+
+	//Variables related to file locking
+	private Lock fileLock = new ReentrantLock();
+	private Set<String> lockedFileSet = new HashSet<>();
+	private Condition fileLockCondition = fileLock.newCondition();
+	private boolean isSetAvailable = true;
 
 	public ParticipantImpl() {
 		initParticipant();
@@ -47,7 +59,7 @@ public class ParticipantImpl implements Iface {
 			//If status == READY
 				//1. GET VOTING decision from Coordinator
 				//2. IF voting decision was COMMITTED
-				//		Then copy file name and content in PERMANENT table
+				//		Then copy file name and content in PERMENANT table
 				//		Update status to COMMITTED and PARTICIPANT status READY
 				//	 Else update final decision in TEMP table to ABORTED
 			//Else If status == FAILURE
@@ -96,7 +108,7 @@ public class ParticipantImpl implements Iface {
 			}
 		} else {
 			//Acquire lock
-			FILE_LOCK.lock();
+			fileLock.lock();
 
 			//Copy file content to TEMP table
 			try {
@@ -120,24 +132,24 @@ public class ParticipantImpl implements Iface {
 
 	private boolean isFileLocked(String filename) {
 		boolean isLocked = false;
-		FILE_LOCK.lock();
+		fileLock.lock();
 		try {
 			while(!isSetAvailable) {
 				try {
-					LOCK_CONDITION.await();
+					fileLockCondition.await();
 				}catch(InterruptedException oops) {}
 			}
 			
 			isSetAvailable = false;
 			
-			if(LOCKED_FILES.contains(filename))
+			if(lockedFileSet.contains(filename))
 				isLocked = true;
 			
 			isSetAvailable = true;
 			
-			LOCK_CONDITION.signal();
+			fileLockCondition.signal();
 		}finally {
-			FILE_LOCK.unlock();
+			fileLock.unlock();
 		}
 
 		return isLocked;
@@ -169,7 +181,10 @@ public class ParticipantImpl implements Iface {
 	@Override
 	public String vote(int tid) throws SystemException, TException {
 		//TODO Voting method
-		//Get PARTICIPANT status for Transaction Id (tid) 
+		//Get PARTICIPANT status for Transaction Id (tid)
+		/*try {
+			
+		}*/
 		//Return status to coordinator
 		return null;
 	}
@@ -177,7 +192,7 @@ public class ParticipantImpl implements Iface {
 	@Override
 	public boolean commit(int tid) throws SystemException, TException {
 		//TODO COMMIT
-		//First move file name and content from TEMP table to PERMANENT table
+		//First move file name and content from TEMP table to PERMEMANT table
 		//Update status for tid in TEMP table to COMMITTED
 		//Release lock on file that was acquired in writeFile method
 		//if above steps done successfully then return true
