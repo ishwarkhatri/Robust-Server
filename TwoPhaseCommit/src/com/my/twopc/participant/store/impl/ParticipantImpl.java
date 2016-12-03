@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.HashSet;
 import java.util.Set;
@@ -15,17 +16,24 @@ import org.apache.thrift.TException;
 
 import com.my.twopc.common.Constants;
 import com.my.twopc.custom.exception.SystemException;
+import com.my.twopc.model.PARTICIPANT_TRANS_STATUS;
 import com.my.twopc.model.RFile;
 import com.my.twopc.model.StatusReport;
 import com.my.twopc.participant.store.Participant.Iface;
 
 public class ParticipantImpl implements Iface {
 
+	//Variables related to database connection
 	private Connection connection;
-	private static final Lock FILE_LOCK = new ReentrantLock();
-	private static final Set<String> LOCKED_FILES = new HashSet<>();
-	private static final Condition LOCK_CONDITION = FILE_LOCK.newCondition();
-	private static boolean isSetAvailable = true;
+	private boolean isConnectionAvailable;
+	private Lock connectionLock = new ReentrantLock();
+	private Condition condition = connectionLock.newCondition();
+
+	//Variables related to file locking
+	private Lock fileLock = new ReentrantLock();
+	private Set<String> lockedFileSet = new HashSet<>();
+	private Condition fileLockCondition = fileLock.newCondition();
+	private boolean isSetAvailable = true;
 
 	public ParticipantImpl() {
 		initParticipant();
@@ -88,10 +96,31 @@ public class ParticipantImpl implements Iface {
 		//TODO write to file method
 		if(isFileLocked(rFile.getFilename())) {
 			//Add entry in TEMP table with PARTICIPANT status as ABORTED
+			try {
+				PreparedStatement ps = connection.prepareStatement(Constants.PARTICIPANT_TMP_SELF_STATUS_UPDATE_QUERY);
+				ps.setString(1, PARTICIPANT_TRANS_STATUS.ABORTED.toString());
+				ps.setInt(2, rFile.getTid());
+
+				ps.close();
+				connection.commit();
+			} catch (SQLException oops) {
+				oops.printStackTrace();
+			}
 		} else {
 			//Acquire lock
-			
+			fileLock.lock();
+
 			//Copy file content to TEMP table
+			try {
+				PreparedStatement ps = connection.prepareStatement(Constants.PARTICIPANT_TMP_INSERT_QUERY);
+				ps.setInt(1, rFile.getTid());
+				ps.setString(2, rFile.getFilename());
+				ps.setString(3, rFile.getContent());
+
+				ps.close();
+			} catch (SQLException oops) {
+
+			}
 			//if operation is successful then update PARTICIPANT status as READY
 			//else update status as FAILURE and final decision as ABORTED
 
@@ -103,24 +132,24 @@ public class ParticipantImpl implements Iface {
 
 	private boolean isFileLocked(String filename) {
 		boolean isLocked = false;
-		FILE_LOCK.lock();
+		fileLock.lock();
 		try {
 			while(!isSetAvailable) {
 				try {
-					LOCK_CONDITION.await();
+					fileLockCondition.await();
 				}catch(InterruptedException oops) {}
 			}
 			
 			isSetAvailable = false;
 			
-			if(LOCKED_FILES.contains(filename))
+			if(lockedFileSet.contains(filename))
 				isLocked = true;
 			
 			isSetAvailable = true;
 			
-			LOCK_CONDITION.signal();
+			fileLockCondition.signal();
 		}finally {
-			FILE_LOCK.unlock();
+			fileLock.unlock();
 		}
 
 		return isLocked;
@@ -152,7 +181,10 @@ public class ParticipantImpl implements Iface {
 	@Override
 	public String vote(int tid) throws SystemException, TException {
 		//TODO Voting method
-		//Get PARTICIPANT status for Transaction Id (tid) 
+		//Get PARTICIPANT status for Transaction Id (tid)
+		/*try {
+			
+		}*/
 		//Return status to coordinator
 		return null;
 	}
