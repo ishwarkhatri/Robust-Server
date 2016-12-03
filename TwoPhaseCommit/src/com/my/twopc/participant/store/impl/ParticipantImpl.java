@@ -25,9 +25,9 @@ public class ParticipantImpl implements Iface {
 
 	//Variables related to database connection
 	private Connection connection;
-	private boolean isConnectionAvailable;
+	private boolean isConnectionAvailable = true;
 	private Lock connectionLock = new ReentrantLock();
-	private Condition condition = connectionLock.newCondition();
+	private Condition connectionCondition = connectionLock.newCondition();
 
 	//Variables related to file locking
 	private Lock fileLock = new ReentrantLock();
@@ -96,11 +96,21 @@ public class ParticipantImpl implements Iface {
 		//TODO write to file method
 		if(isFileLocked(rFile.getFilename())) {
 			//Add entry in TEMP table with PARTICIPANT status as ABORTED
+			connectionLock.lock();
 			try {
-				PreparedStatement ps = connection.prepareStatement(Constants.PARTICIPANT_TMP_SELF_STATUS_UPDATE_QUERY);
-				ps.setString(1, PARTICIPANT_TRANS_STATUS.ABORTED.toString());
-				ps.setInt(2, rFile.getTid());
-
+				while(!isConnectionAvailable) {
+					try{
+						connectionCondition.await();
+					}catch(InterruptedException ie){}
+				}
+				
+				PreparedStatement ps = connection.prepareStatement(Constants.PARTICIPANT_TMP_IS_FILE_LOCKED_QUERY);
+				ps.setInt(1, rFile.getTid());
+				ps.setString(2, rFile.getFilename());
+				ps.setString(3, rFile.getContent());
+				ps.setString(4, PARTICIPANT_TRANS_STATUS.FAILURE.getValue());
+				
+				ps.executeUpdate();
 				ps.close();
 				connection.commit();
 			} catch (SQLException oops) {
@@ -180,13 +190,36 @@ public class ParticipantImpl implements Iface {
 
 	@Override
 	public String vote(int tid) throws SystemException, TException {
-		//TODO Voting method
 		//Get PARTICIPANT status for Transaction Id (tid)
-		/*try {
+		connectionLock.lock();
+		String myStatus = PARTICIPANT_TRANS_STATUS.FAILURE.getValue();
+		try {
+			while(!isConnectionAvailable) {
+				try {
+					connectionCondition.await();
+				}catch(InterruptedException ie){}
+			}
 			
-		}*/
+			isConnectionAvailable = false;
+			
+			PreparedStatement pst = connection.prepareStatement(Constants.PARTICIPANT_TMP_TABLE_READ_QUERY);
+			pst.setInt(1, tid);
+			ResultSet rs = pst.executeQuery();
+			if(rs.next()) {
+				//Vote whatever decision was saved in database
+				myStatus = rs.getString("MY_STATUS");
+			}
+
+			isConnectionAvailable = true;
+			connectionCondition.signal();
+		} catch (Exception oops) {
+			System.err.println(oops.getMessage());
+		}finally {
+			connectionLock.unlock();
+		}
+
 		//Return status to coordinator
-		return null;
+		return myStatus;
 	}
 
 	@Override
@@ -202,12 +235,77 @@ public class ParticipantImpl implements Iface {
 
 	@Override
 	public boolean abort(int tid) throws SystemException, TException {
-		//TODO ABORT
-		//Update status for tid in TEMP table to ABORTED
+		connectionLock.lock();
+		boolean isSuccessful = false;
+		boolean isCommitted = false;
+		RFile rFile = new RFile();
+		try {
+			while(!isConnectionAvailable) {
+				try {
+					connectionCondition.await();
+				}catch(InterruptedException ie){}
+			}
+			isConnectionAvailable = false;
+			
+			//Read file name for TransactionId = tid
+			PreparedStatement pst = connection.prepareStatement(Constants.PARTICIPANT_TMP_TABLE_READ_QUERY);
+			pst.setInt(1, tid);
+			ResultSet rs = pst.executeQuery();
+			if(rs.next()) {
+				rFile.setFilename(rs.getString("FILE_NAME"));
+				rFile.setContent(rs.getString("FILE_CONTENT"));
+				rFile.setTid(rs.getInt("TID"));
+				rs.close();
+				
+				//Update status for tid in TEMP table to ABORTED
+				pst = connection.prepareStatement(Constants.PARTICIPANT_TMP_FINAL_STATUS_UPDATE_QUERY);
+				pst.setString(1, PARTICIPANT_TRANS_STATUS.ABORTED.getValue());
+				pst.setInt(2, tid);
+				pst.executeUpdate();
+				connection.commit();
+				
+				isCommitted = true;
+			}
+			
+			isConnectionAvailable = true;
+			connectionCondition.signal();
+		} catch (Exception oops) {
+			System.err.println(oops.getMessage());
+		}finally {
+			connectionLock.unlock();
+		}
+		
 		//Release lock on file that was acquired in writeFile method
 		//if operation done successfully then return true
-		//else false
-		return false;
+		if(isCommitted && releaseLock(rFile.getFilename()))
+				isSuccessful = true;
+		
+		return isSuccessful;
+	}
+
+	private boolean releaseLock(String filename) {
+		boolean isLockReleased = false;
+		fileLock.lock();
+		try {
+			while(!isSetAvailable) {
+				try {
+					fileLockCondition.await();
+				}catch(InterruptedException oops) {}
+			}
+			
+			isSetAvailable = false;
+			
+			if(lockedFileSet.remove(filename)) {
+				isLockReleased = true;
+			}
+
+			isSetAvailable = true;
+			fileLockCondition.signal();
+		}finally {
+			fileLock.unlock();
+		}
+
+		return isLockReleased;
 	}
 
 	private void printError(Exception oops, boolean doExit) {
