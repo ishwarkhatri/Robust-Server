@@ -1,23 +1,19 @@
 package com.my.twopc.participant.store.impl;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.Statement;
+import com.my.twopc.common.Constants;
+import com.my.twopc.custom.exception.SystemException;
+import com.my.twopc.model.PARTICIPANT_TRANS_STATUS;
+import com.my.twopc.model.RFile;
+import com.my.twopc.model.StatusReport;
+import com.my.twopc.participant.store.Participant.Iface;
+import org.apache.thrift.TException;
+
+import java.sql.*;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-
-import org.apache.thrift.TException;
-
-import com.my.twopc.common.Constants;
-import com.my.twopc.custom.exception.SystemException;
-import com.my.twopc.model.RFile;
-import com.my.twopc.model.StatusReport;
-import com.my.twopc.participant.store.Participant.Iface;
 
 public class ParticipantImpl implements Iface {
 
@@ -51,7 +47,7 @@ public class ParticipantImpl implements Iface {
 			//If status == READY
 				//1. GET VOTING decision from Coordinator
 				//2. IF voting decision was COMMITTED
-				//		Then copy file name and content in PERMENANT table
+				//		Then copy file name and content in PERMANENT table
 				//		Update status to COMMITTED and PARTICIPANT status READY
 				//	 Else update final decision in TEMP table to ABORTED
 			//Else If status == FAILURE
@@ -88,10 +84,31 @@ public class ParticipantImpl implements Iface {
 		//TODO write to file method
 		if(isFileLocked(rFile.getFilename())) {
 			//Add entry in TEMP table with PARTICIPANT status as ABORTED
+			try {
+				PreparedStatement ps = connection.prepareStatement(Constants.PARTICIPANT_TMP_SELF_STATUS_UPDATE_QUERY);
+				ps.setString(1, PARTICIPANT_TRANS_STATUS.ABORTED.toString());
+				ps.setInt(2, rFile.getTid());
+
+				ps.close();
+				connection.commit();
+			} catch (SQLException oops) {
+				oops.printStackTrace();
+			}
 		} else {
 			//Acquire lock
-			
+			FILE_LOCK.lock();
+
 			//Copy file content to TEMP table
+			try {
+				PreparedStatement ps = connection.prepareStatement(Constants.PARTICIPANT_TMP_INSERT_QUERY);
+				ps.setInt(1, rFile.getTid());
+				ps.setString(2, rFile.getFilename());
+				ps.setString(3, rFile.getContent());
+
+				ps.close();
+			} catch (SQLException oops) {
+
+			}
 			//if operation is successful then update PARTICIPANT status as READY
 			//else update status as FAILURE and final decision as ABORTED
 
@@ -160,7 +177,7 @@ public class ParticipantImpl implements Iface {
 	@Override
 	public boolean commit(int tid) throws SystemException, TException {
 		//TODO COMMIT
-		//First move file name and content from TEMP table to PERMEMANT table
+		//First move file name and content from TEMP table to PERMANENT table
 		//Update status for tid in TEMP table to COMMITTED
 		//Release lock on file that was acquired in writeFile method
 		//if above steps done successfully then return true
