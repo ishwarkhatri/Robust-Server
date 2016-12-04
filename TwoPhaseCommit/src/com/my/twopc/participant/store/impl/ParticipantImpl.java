@@ -159,6 +159,30 @@ public class ParticipantImpl implements Iface {
 		return isLocked;
 	}
 
+	private boolean getLockOnFile(String fileName) {
+		boolean isLockAcquired = false;
+		fileLock.lock();
+		try {
+			while (!isSetAvailable) {
+				try {
+					fileLockCondition.await();
+				} catch (InterruptedException oops) {}
+			}
+			isSetAvailable = false;
+
+			if (lockedFileSet.add(fileName))
+				isLockAcquired = true;
+
+			isSetAvailable = true;
+
+			fileLockCondition.signal();
+		} finally {
+			fileLock.unlock();
+		}
+
+		return isLockAcquired;
+	}
+
 	@Override
 	public RFile readFromFile(String filename) throws SystemException, TException {
 		//Read the contents of file with name <filename> and return to Co-ordinator
@@ -218,7 +242,6 @@ public class ParticipantImpl implements Iface {
 
 	@Override
 	public boolean commit(int tid) throws SystemException, TException {
-		//TODO COMMIT
 		boolean isCommitted = false;
 		String fileName = "";
 		String content = "";
