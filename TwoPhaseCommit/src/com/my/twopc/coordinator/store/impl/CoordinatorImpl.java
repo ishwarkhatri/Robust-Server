@@ -1,8 +1,8 @@
-package com.my.twopc.file.store.impl;
+package com.my.twopc.coordinator.store.impl;
 
 import com.my.twopc.common.Constants;
+import com.my.twopc.coordinator.store.Coordinator.Iface;
 import com.my.twopc.custom.exception.SystemException;
-import com.my.twopc.file.store.FileStore.Iface;
 import com.my.twopc.model.*;
 import com.my.twopc.participant.store.Participant;
 import org.apache.thrift.TException;
@@ -355,5 +355,11 @@ public class CoordinatorImpl implements Iface {
 		System.err.println(oops.getClass().getName() + ": " + oops.getMessage());
 		if(doExit)
 			System.exit(1);
+	}
+
+	@Override
+	public String getFinalVotingDecision(int tid) throws SystemException, TException {
+		// TODO Auto-generated method stub
+		return null;
 	}
 }

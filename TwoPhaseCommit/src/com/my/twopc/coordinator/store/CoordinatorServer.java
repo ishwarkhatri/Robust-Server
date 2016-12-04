@@ -1,4 +1,4 @@
-package com.my.twopc.file.store;
+package com.my.twopc.coordinator.store;
 
 import java.net.InetAddress;
 import java.util.ArrayList;
@@ -10,8 +10,8 @@ import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TServerTransport;
 
-import com.my.twopc.file.store.FileStore.Iface;
-import com.my.twopc.file.store.impl.CoordinatorImpl;
+import com.my.twopc.coordinator.store.Coordinator.Iface;
+import com.my.twopc.coordinator.store.impl.CoordinatorImpl;
 import com.my.twopc.model.ReplicaInfo;
 
 public class CoordinatorServer {
@@ -24,7 +24,7 @@ public class CoordinatorServer {
 
         try {
         	CoordinatorImpl handler = new CoordinatorImpl(participantList);
-            FileStore.Processor<Iface> processor = new FileStore.Processor<Iface>(handler);
+            Coordinator.Processor<Iface> processor = new Coordinator.Processor<Iface>(handler);
 
             Runnable simple = new Runnable() {
                 public void run() {
@@ -67,7 +67,7 @@ public class CoordinatorServer {
         return participantList;
     }
 
-    private static void simple(final FileStore.Processor<Iface> processor) {
+    private static void simple(final Coordinator.Processor<Iface> processor) {
         try {
             TServerTransport serverTransport = new TServerSocket(0);
             TServer server = new TThreadPoolServer(new TThreadPoolServer.Args(serverTransport).processor(processor));
