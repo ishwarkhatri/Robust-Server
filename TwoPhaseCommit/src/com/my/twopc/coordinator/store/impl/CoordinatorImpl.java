@@ -239,8 +239,11 @@ public class CoordinatorImpl implements Iface {
 	private void updateTransaction(int tId, String updateQuery, COOD_TRANS_STATUS newStatus) {
 		connectionLock.lock(); //do not forget to unlock this in finally
 		try {
-			while(!isConnectionAvailable)
-				condition.await();
+			while(!isConnectionAvailable) {
+				try {
+					condition.await();
+				}catch(InterruptedException ie){}
+			}
 			
 			isConnectionAvailable = false;
 			PreparedStatement ps = connection.prepareStatement(updateQuery);
@@ -299,8 +302,11 @@ public class CoordinatorImpl implements Iface {
 		String content = rFile.getContent();
 		connectionLock.lock();
 		try {
-			while(!isConnectionAvailable)
-				condition.await();
+			while(!isConnectionAvailable) {
+				try {
+					condition.await();
+				}catch(InterruptedException ie){}
+			}
 			
 			isConnectionAvailable = false;
 			PreparedStatement ps = connection.prepareStatement(Constants.COOD_TRANS_INSERT_QUERY, Statement.RETURN_GENERATED_KEYS);
@@ -359,7 +365,31 @@ public class CoordinatorImpl implements Iface {
 
 	@Override
 	public String getFinalVotingDecision(int tid) throws SystemException, TException {
-		// TODO Auto-generated method stub
+		// TODO Get final voting decision taken
+		connectionLock.lock();
+		try {
+			while(!isConnectionAvailable) {
+				try {
+					condition.await();
+				}catch(InterruptedException ie){}
+			}
+			
+			isConnectionAvailable = false;
+			PreparedStatement ps = connection.prepareStatement(Constants.COOD_TRANS_GET_DECISION_QUERY);
+			ps.setInt(1, tid);
+			ResultSet rs = ps.executeQuery();
+			if(rs.next()) {
+				return rs.getString(1);
+			}
+			
+			isConnectionAvailable = true;
+			condition.signal();
+		}catch(SQLException ouch) {
+			printError(ouch, false);
+		}
+		finally {
+			connectionLock.unlock();
+		}
 		return null;
 	}
 }
