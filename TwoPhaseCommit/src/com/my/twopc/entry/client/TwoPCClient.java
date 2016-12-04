@@ -43,7 +43,8 @@ public class TwoPCClient {
 			TProtocol protocol = new TBinaryProtocol(transport);
 			Coordinator.Client client = new Coordinator.Client(protocol);
 
-			for(Operation op : operationList) {
+			for(int i = 0; i < operationList.size(); i++) {
+				Operation op = operationList.get(i);
 				if("read".equalsIgnoreCase(op.getOperationType())) {
 					System.out.println("Reading from file: " + op.getFileName());
 					RFile rfile = client.readFile(op.getFileName());

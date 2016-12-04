@@ -1,12 +1,12 @@
 write,file2.txt,This is file2 content
-read,file1.txt
 write,file1,File1 contents
-read,file2.txt
-read,file1.txt
 write,file3.txt,This project demonstrates two phase commit
 write,file4.txt,This file contains operations to be performed
+write,file2.txt,Changed contents of file2
+read,file1.txt
+read,file2.txt
+read,file1.txt
 read,file4.txt
 read,file2.txt
-write,file2.txt,Changed contents of file2
 read,file2.txt
 read,file3.txt
