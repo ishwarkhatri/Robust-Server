@@ -20,6 +20,13 @@ public class CoordinatorServer {
     private static final int NUM_REPLICAS = 3;
 
     public static void main(String[] args) {
+    	if(args.length == 0) {
+    		System.err.println("Invalid arguments!\nEnter port number");
+    		System.exit(1);
+    	}
+    	
+    	int serverPort = Integer.parseInt(args[0]);
+
         // Get hostname and port number from user
         List<ReplicaInfo> participantList = getReplicaInfoFromUser();
 
@@ -29,7 +36,7 @@ public class CoordinatorServer {
 
             Runnable simple = new Runnable() {
                 public void run() {
-                    simple(processor);
+                    simple(processor, serverPort);
                 }
             };
 
@@ -68,12 +75,15 @@ public class CoordinatorServer {
         return participantList;
     }
 
-    private static void simple(final Coordinator.Processor<Iface> processor) {
+    private static void simple(final Coordinator.Processor<Iface> processor, int portNo) {
         try {
-            TServerTransport serverTransport = new TServerSocket(0);
+            TServerSocket serverTransport = new TServerSocket(portNo);
             TServer server = new TThreadPoolServer(new TThreadPoolServer.Args(serverTransport).processor(processor));
 
-            System.out.println("Server address: " + InetAddress.getLocalHost().getHostName());
+            System.out.println("Coordinator Address");
+            System.out.println("Hostname: " + InetAddress.getLocalHost().getHostName());
+            System.out.println("Port no.: " + portNo);
+
             server.serve();
         } catch (Exception e) {
             System.out.println(e.getMessage());

@@ -28,7 +28,6 @@ import com.my.twopc.model.RFile;
 import com.my.twopc.model.Status;
 import com.my.twopc.model.StatusReport;
 import com.my.twopc.model.TempTableDTO;
-import com.my.twopc.participant.store.Participant;
 import com.my.twopc.participant.store.Participant.Iface;
 
 public class ParticipantImpl implements Iface {

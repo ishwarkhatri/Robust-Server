@@ -40,7 +40,7 @@ public class Constants {
 	public static final String PARTICIPANT_TMP_TABLE_NAME = "PARTICIPANT_TEMP_DATABASE";
 	public static final String PARTICIPANT_CREATE_PR_TABLE_QUERY = "CREATE TABLE IF NOT EXISTS " + PARTICIPANT_PR_TABLE_NAME
 																	+ " (FILE_NAME CHAR(50) PRIMARY KEY,"
-																	+ " FILE_CONTENT TEXT";
+																	+ " FILE_CONTENT TEXT)";
 	public static final String PARTICIPANT_CREATE_TMP_TABLE_QUERY = "CREATE TABLE IF NOT EXISTS " + PARTICIPANT_TMP_TABLE_NAME
 																	+ " (TID INTEGER PRIMARY KEY,"
 																	+ " FILE_NAME CHAR(50),"
