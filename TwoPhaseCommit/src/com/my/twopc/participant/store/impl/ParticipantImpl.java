@@ -18,6 +18,7 @@ import com.my.twopc.common.Constants;
 import com.my.twopc.custom.exception.SystemException;
 import com.my.twopc.model.PARTICIPANT_TRANS_STATUS;
 import com.my.twopc.model.RFile;
+import com.my.twopc.model.Status;
 import com.my.twopc.model.StatusReport;
 import com.my.twopc.participant.store.Participant.Iface;
 
@@ -93,9 +94,13 @@ public class ParticipantImpl implements Iface {
 
 	@Override
 	public StatusReport writeToFile(RFile rFile) throws SystemException, TException {
-		//TODO write to file method
+		StatusReport statusRep = new StatusReport(Status.SUCCESSFUL);
+
 		if(isFileLocked(rFile.getFilename())) {
 			//Add entry in TEMP table with PARTICIPANT status as ABORTED
+			statusRep.setStatus(Status.FAILED);
+			statusRep.setMessage("File is locked or being used by another client");
+
 			connectionLock.lock();
 			try {
 				while(!isConnectionAvailable) {
@@ -103,6 +108,8 @@ public class ParticipantImpl implements Iface {
 						connectionCondition.await();
 					}catch(InterruptedException ie){}
 				}
+				
+				isConnectionAvailable = false;
 				
 				PreparedStatement ps = connection.prepareStatement(Constants.PARTICIPANT_TMP_IS_FILE_LOCKED_QUERY);
 				ps.setInt(1, rFile.getTid());
@@ -113,31 +120,67 @@ public class ParticipantImpl implements Iface {
 				ps.executeUpdate();
 				ps.close();
 				connection.commit();
+
+				isConnectionAvailable = true;
+				connectionCondition.signal();
 			} catch (SQLException oops) {
 				oops.printStackTrace();
+			}finally {
+				connectionLock.unlock();
 			}
 		} else {
 			//Acquire lock
-			fileLock.lock();
+			boolean isLockAcquired = getLockOnFile(rFile.getFilename());
 
 			//Copy file content to TEMP table
+			connectionLock.lock();
 			try {
-				PreparedStatement ps = connection.prepareStatement(Constants.PARTICIPANT_TMP_INSERT_QUERY);
-				ps.setInt(1, rFile.getTid());
-				ps.setString(2, rFile.getFilename());
-				ps.setString(3, rFile.getContent());
+				while(!isConnectionAvailable) {
+					try{
+						connectionCondition.await();
+					}catch(InterruptedException ie){}
+				}
+
+				isConnectionAvailable = false;
+				
+				PreparedStatement ps = null;
+				if(isLockAcquired) {
+					//if operation is successful then update PARTICIPANT status as READY
+					ps = connection.prepareStatement(Constants.PARTICIPANT_TMP_INSERT_QUERY);
+					ps.setInt(1, rFile.getTid());
+					ps.setString(2, rFile.getFilename());
+					ps.setString(3, rFile.getContent());
+					ps.setString(4, PARTICIPANT_TRANS_STATUS.READY.getValue());
+					ps.executeUpdate();
+				} else {
+					statusRep.setStatus(Status.FAILED);
+					statusRep.setMessage("Failed to acquire lock");
+
+					//else update status as FAILURE
+					ps = connection.prepareStatement(Constants.PARTICIPANT_TMP_IS_FILE_LOCKED_QUERY);
+					ps.setInt(1, rFile.getTid());
+					ps.setString(2, rFile.getFilename());
+					ps.setString(3, rFile.getContent());
+					ps.setString(4, PARTICIPANT_TRANS_STATUS.FAILURE.getValue());
+					ps.executeUpdate();
+				}
 
 				ps.close();
+				connection.commit();
+
+				isConnectionAvailable = true;
+				connectionCondition.signal();
 			} catch (SQLException oops) {
-
+				System.err.println(oops.getMessage());
+				oops.printStackTrace();
+			} finally {
+				connectionLock.unlock();
 			}
-			//if operation is successful then update PARTICIPANT status as READY
-			//else update status as FAILURE and final decision as ABORTED
-
 			
-			//Do not release lock here. It should be done in either commit or abort methods
+			//Do not release lock on file here. It should be done in either commit or abort methods
+
 		}
-		return null;
+		return statusRep;
 	}
 
 	private boolean isFileLocked(String filename) {
@@ -163,6 +206,30 @@ public class ParticipantImpl implements Iface {
 		}
 
 		return isLocked;
+	}
+
+	private boolean getLockOnFile(String fileName) {
+		boolean isLockAcquired = false;
+		fileLock.lock();
+		try {
+			while (!isSetAvailable) {
+				try {
+					fileLockCondition.await();
+				} catch (InterruptedException oops) {}
+			}
+			isSetAvailable = false;
+
+			if (lockedFileSet.add(fileName))
+				isLockAcquired = true;
+
+			isSetAvailable = true;
+
+			fileLockCondition.signal();
+		} finally {
+			fileLock.unlock();
+		}
+
+		return isLockAcquired;
 	}
 
 	@Override
@@ -224,12 +291,60 @@ public class ParticipantImpl implements Iface {
 
 	@Override
 	public boolean commit(int tid) throws SystemException, TException {
-		//TODO COMMIT
-		//First move file name and content from TEMP table to PERMEMANT table
-		//Update status for tid in TEMP table to COMMITTED
+		boolean isCommitted = false;
+		String fileName = "";
+		String content = "";
+
+		// Acquire lock on file
+		connectionLock.lock();
+
+		try {
+			while (!isConnectionAvailable)
+				connectionCondition.await();
+
+			isConnectionAvailable = true;
+			//First move file name and content from TEMP table to PERMEMANT table
+			PreparedStatement psRead = connection.prepareStatement(Constants.PARTICIPANT_TMP_TABLE_READ_QUERY);
+			psRead.setInt(1, tid);
+
+			ResultSet rs = psRead.executeQuery();
+			if (rs.next()) {
+				fileName = rs.getString("FILE_NAME");
+				content = rs.getString("FILE_CONTENT");
+			}
+			connection.commit();
+
+			PreparedStatement psWrite = connection.prepareStatement(Constants.PARTICIPANT_PR_INSERT_QUERY);
+			psWrite.setString(1, fileName);
+			psWrite.setString(2, content);
+			psWrite.executeUpdate();
+			connection.commit();
+
+			//Update status for tid in TEMP table to COMMITTED
+			PreparedStatement ps = connection.prepareStatement(Constants.PARTICIPANT_TMP_FINAL_STATUS_UPDATE_QUERY);
+			ps.setInt(1, tid);
+
+			ps.executeUpdate();
+			connection.commit();
+
+			//Update the condition variable
+			isConnectionAvailable = true;
+			//Signal another waiting thread
+			connectionCondition.signal();
+
+
+			//if above steps done successfully then return true
+			isCommitted = true;
+			//else return false
+		} catch (Exception oops) {
+			printError(oops, true);
+		}finally {
+			// Release the acquired lock
+			connectionLock.unlock();
+		}
 		//Release lock on file that was acquired in writeFile method
-		//if above steps done successfully then return true
-		//else return false
+		if (isCommitted && releaseLock(fileName))
+			return true;
 		return false;
 	}
 
