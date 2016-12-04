@@ -7,6 +7,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
@@ -20,6 +21,7 @@ import com.my.twopc.model.PARTICIPANT_TRANS_STATUS;
 import com.my.twopc.model.RFile;
 import com.my.twopc.model.Status;
 import com.my.twopc.model.StatusReport;
+import com.my.twopc.model.TempTableDTO;
 import com.my.twopc.participant.store.Participant.Iface;
 
 public class ParticipantImpl implements Iface {
@@ -36,7 +38,13 @@ public class ParticipantImpl implements Iface {
 	private Condition fileLockCondition = fileLock.newCondition();
 	private boolean isSetAvailable = true;
 
-	public ParticipantImpl() {
+	//Coordinator hostname & port
+	private String coordinatorHostName;
+	private int coordinatorPortNumber;
+
+	public ParticipantImpl(String coordHostname, int coordPort) {
+		coordinatorHostName = coordHostname;
+		coordinatorPortNumber = coordPort;
 		initParticipant();
 	}
 
@@ -54,18 +62,55 @@ public class ParticipantImpl implements Iface {
 	private void recoverFromFailure() {
 		//TODO Recovery from failure
 		//Fetch records from TEMP table for which status is not in (COMMITTED, ABORTED)
+		List<TempTableDTO> incompleteTransactionList = getPendingTransactions();
 		
 		//Iterate over all the records fetch in above step
 		//For each record
+		for(TempTableDTO transaction : incompleteTransactionList) {
+			RFile rFile = new RFile(transaction.getTransactionId(), transaction.getFileName(), transaction.getFileContent());
 			//If status == READY
+			if(transaction.getParticipantStatus() == PARTICIPANT_TRANS_STATUS.READY) {
 				//1. GET VOTING decision from Coordinator
+				PARTICIPANT_TRANS_STATUS votingDecision = getVotingDecisionFor(transaction.getTransactionId());
+
 				//2. IF voting decision was COMMITTED
-				//		Then copy file name and content in PERMENANT table
-				//		Update status to COMMITTED and PARTICIPANT status READY
-				//	 Else update final decision in TEMP table to ABORTED
+				if(votingDecision == PARTICIPANT_TRANS_STATUS.COMMITTED) {
+					
+					//	Then copy file name and content in PERMENANT table
+					//	And update FINAL_STATUS to COMMITTED and MY_STATUS to READY
+					commitFile(rFile);
+				}
+				else { 
+					//	 Else update FINAL_STATUS in TEMP table to ABORTED
+					abortFile(rFile);
+				}
+			}
 			//Else If status == FAILURE
+			else if(transaction.getParticipantStatus() == PARTICIPANT_TRANS_STATUS.FAILURE) {
 				//Update final decision in TEMP table to ABORTED
+				abortFile(rFile);
+			}
+		}
+	}
+
+	private void abortFile(RFile rFile) {
+		// TODO Abort file write operation
 		
+	}
+
+	private void commitFile(RFile rFile) {
+		// TODO Commit file to Permanent table
+		
+	}
+
+	private PARTICIPANT_TRANS_STATUS getVotingDecisionFor(int transactionId) {
+		// TODO Get voting decision from Coordinator for a given transaction id
+		return null;
+	}
+
+	private List<TempTableDTO> getPendingTransactions() {
+		// TODO Read pending transactions from TEMP Table
+		return null;
 	}
 
 	private void createTransactionLogTable() {
