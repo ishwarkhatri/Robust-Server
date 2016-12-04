@@ -26,6 +26,7 @@ public class CoordinatorImpl implements Iface {
 	private Condition condition = connectionLock.newCondition();
 
 	public CoordinatorImpl(List<ReplicaInfo> replicaList) {
+		participantList = replicaList;
 		//Initialize the state of co-ordinator
 		//Recover from failure if any, check for incomplete requests
 		init();
