@@ -6,6 +6,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -14,6 +15,10 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.thrift.TException;
+import org.apache.thrift.protocol.TBinaryProtocol;
+import org.apache.thrift.protocol.TProtocol;
+import org.apache.thrift.transport.TSocket;
+import org.apache.thrift.transport.TTransport;
 
 import com.my.twopc.common.Constants;
 import com.my.twopc.custom.exception.SystemException;
@@ -22,6 +27,7 @@ import com.my.twopc.model.RFile;
 import com.my.twopc.model.Status;
 import com.my.twopc.model.StatusReport;
 import com.my.twopc.model.TempTableDTO;
+import com.my.twopc.participant.store.Participant;
 import com.my.twopc.participant.store.Participant.Iface;
 
 public class ParticipantImpl implements Iface {
@@ -93,24 +99,69 @@ public class ParticipantImpl implements Iface {
 		}
 	}
 
+	// Abort file write operation
 	private void abortFile(RFile rFile) {
-		// TODO Abort file write operation
-		
+		try {
+			abort(rFile.getTid());
+		} catch (Exception ouch) {
+			printError(ouch, true);
+		}
 	}
 
+	// Commit file to Permanent table
 	private void commitFile(RFile rFile) {
-		// TODO Commit file to Permanent table
-		
+		try {
+			commit(rFile.getTid());
+		} catch (Exception ouch) {
+			printError(ouch, true);
+		}
 	}
 
 	private PARTICIPANT_TRANS_STATUS getVotingDecisionFor(int transactionId) {
-		// TODO Get voting decision from Coordinator for a given transaction id
+		//Get voting decision from Coordinator for a given transaction id
+		try {
+			//Connect to the coordinator
+			TTransport transport = new TSocket(coordinatorHostName, coordinatorPortNumber);
+			transport.open();
+
+			TProtocol protocol = new TBinaryProtocol(transport);
+			Participant.Client coordinator = new Participant.Client(protocol);
+
+			//coordinator.
+		}catch(Exception oops) {
+			printError(oops, true);
+		}
 		return null;
 	}
 
 	private List<TempTableDTO> getPendingTransactions() {
-		// TODO Read pending transactions from TEMP Table
-		return null;
+		List<TempTableDTO> incompleteTransactions = new ArrayList<>();
+
+		connectionLock.lock();
+		TempTableDTO tempTableDTO;
+		try {
+			PreparedStatement ps = connection.prepareStatement(Constants.PARTICIPANT_TMP_INCOMPLETE_QUERY);
+			connection.commit();
+
+			ResultSet rs = ps.executeQuery();
+
+			while (rs.next()) {
+				tempTableDTO = new TempTableDTO();
+				tempTableDTO.setTransactionId(rs.getInt("TID"));
+				tempTableDTO.setFileName(rs.getString("FILE_NAME"));
+				tempTableDTO.setFileContent(rs.getString("FILE_CONTENT"));
+				tempTableDTO.setParticipantStatus(PARTICIPANT_TRANS_STATUS.getEnum(rs.getString("MY_STATUS")));
+				tempTableDTO.setVotingDecision(PARTICIPANT_TRANS_STATUS.getEnum(rs.getString("VOTING_STATUS")));
+
+				incompleteTransactions.add(tempTableDTO);
+			}
+		} catch (SQLException oops) {
+
+		}finally {
+			connectionLock.unlock();
+		}
+
+		return incompleteTransactions;
 	}
 
 	private void createTransactionLogTable() {
