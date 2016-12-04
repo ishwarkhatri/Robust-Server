@@ -27,6 +27,6 @@ service FileStore {
   RFile readFile(1: string filename)
     throws (1: SystemException systemException),
 
-  String getFinalVotingDecision(1: i32 tid)
+  string getFinalVotingDecision(1: i32 tid)
 	throws (1: SystemException systemException),
 }

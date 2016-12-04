@@ -494,7 +494,7 @@ public class ParticipantImpl implements Iface {
 		return isSuccessful;
 	}
 
-	private boolean releaseLock(String filename) {
+	public boolean releaseLock(String filename) {
 		boolean isLockReleased = false;
 		fileLock.lock();
 		try {
