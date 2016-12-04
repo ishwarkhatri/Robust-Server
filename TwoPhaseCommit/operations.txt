@@ -9,3 +9,4 @@ read,file4.txt
 read,file2.txt
 write,file2.txt,Changed contents of file2
 read,file2.txt
+read,file3.txt
