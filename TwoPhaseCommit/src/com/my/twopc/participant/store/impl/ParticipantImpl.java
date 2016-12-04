@@ -6,6 +6,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -109,8 +110,33 @@ public class ParticipantImpl implements Iface {
 	}
 
 	private List<TempTableDTO> getPendingTransactions() {
-		// TODO Read pending transactions from TEMP Table
-		return null;
+		List<TempTableDTO> incompleteTransactions = new ArrayList<>();
+
+		connectionLock.lock();
+		TempTableDTO tempTableDTO;
+		try {
+			PreparedStatement ps = connection.prepareStatement(Constants.PARTICIPANT_TMP_INCOMPLETE_QUERY);
+			connection.commit();
+
+			ResultSet rs = ps.executeQuery();
+
+			while (rs.next()) {
+				tempTableDTO = new TempTableDTO();
+				tempTableDTO.setTransactionId(rs.getInt("TID"));
+				tempTableDTO.setFileName(rs.getString("FILE_NAME"));
+				tempTableDTO.setFileContent(rs.getString("FILE_CONTENT"));
+				tempTableDTO.setParticipantStatus(PARTICIPANT_TRANS_STATUS.getEnum(rs.getString("MY_STATUS")));
+				tempTableDTO.setVotingDecision(PARTICIPANT_TRANS_STATUS.getEnum(rs.getString("VOTING_STATUS")));
+
+				incompleteTransactions.add(tempTableDTO);
+			}
+		} catch (SQLException oops) {
+
+		}finally {
+			connectionLock.unlock();
+		}
+
+		return incompleteTransactions;
 	}
 
 	private void createTransactionLogTable() {
