@@ -19,7 +19,7 @@ struct RFile {
   3: required string content;
 }
 
-service FileStore {
+service Coordinator {
 
   StatusReport writeFile(1: RFile rFile)
     throws (1: SystemException systemException),
