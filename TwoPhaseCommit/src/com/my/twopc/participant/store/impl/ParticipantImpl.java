@@ -21,6 +21,7 @@ import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 
 import com.my.twopc.common.Constants;
+import com.my.twopc.coordinator.store.Coordinator;
 import com.my.twopc.custom.exception.SystemException;
 import com.my.twopc.model.PARTICIPANT_TRANS_STATUS;
 import com.my.twopc.model.RFile;
@@ -65,8 +66,8 @@ public class ParticipantImpl implements Iface {
 		recoverFromFailure();
 	}
 
+	//Recovery from failure
 	private void recoverFromFailure() {
-		//TODO Recovery from failure
 		//Fetch records from TEMP table for which status is not in (COMMITTED, ABORTED)
 		List<TempTableDTO> incompleteTransactionList = getPendingTransactions();
 		
@@ -125,9 +126,11 @@ public class ParticipantImpl implements Iface {
 			transport.open();
 
 			TProtocol protocol = new TBinaryProtocol(transport);
-			Participant.Client coordinator = new Participant.Client(protocol);
+			Coordinator.Client coordinator = new Coordinator.Client(protocol);
 
-			//coordinator.
+			String decision = coordinator.getFinalVotingDecision(transactionId);
+			return PARTICIPANT_TRANS_STATUS.getEnum(decision);
+
 		}catch(Exception oops) {
 			printError(oops, true);
 		}
