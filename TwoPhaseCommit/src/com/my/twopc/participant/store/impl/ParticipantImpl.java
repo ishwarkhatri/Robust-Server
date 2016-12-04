@@ -337,22 +337,21 @@ public class ParticipantImpl implements Iface {
 	@Override
 	public RFile readFromFile(String filename) throws SystemException, TException {
 		//Read the contents of file with name <filename> and return to Co-ordinator
-		RFile requestedFile = new RFile();
+		RFile requestedFile = null;
 		try {
 			PreparedStatement ps = connection.prepareStatement(Constants.PARTICIPANT_PR_TABLE_READ_QUERY);
 			ps.setString(1, filename);
 
 			ResultSet rs = ps.executeQuery();
 			if(rs.next()) {
+				requestedFile = new RFile();
 				requestedFile.setFilename(filename);
 				requestedFile.setContent(rs.getString("FILE_CONTENT"));
-			}else {
-				SystemException sysEx = new SystemException();
-				sysEx.setMessage(Constants.NO_SUCH_FILE_ERR_MSG);
-				throw sysEx;
 			}
 		}catch(Exception oops) {
-			
+			System.err.println("Could not complete read request for file: " + filename);
+			oops.printStackTrace();
+			throw new SystemException();
 		}
 		return requestedFile;
 	}

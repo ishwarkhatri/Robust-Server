@@ -47,13 +47,23 @@ public class TwoPCClient {
 				Operation op = operationList.get(i);
 				if("read".equalsIgnoreCase(op.getOperationType())) {
 					System.out.println("Reading from file: " + op.getFileName());
-					RFile rfile = client.readFile(op.getFileName());
-					System.out.println("Results: " + rfile.getContent());
+					try {
+						RFile rfile = client.readFile(op.getFileName());
+						System.out.println("Results: " + rfile.getContent());
+					}catch(Exception ouch) {
+						System.err.println("Could not complete read request: " + ouch.getMessage());
+						ouch.printStackTrace();
+					}
 				}
 				else if("write".equalsIgnoreCase(op.getOperationType())) {
 					System.out.println("Writing data to file '" + op.getFileName() + "' contents '" + op.getFileContent() + "'\n");
-					RFile rfile = new RFile(0, op.getFileName(), op.getFileContent());
-					client.writeFile(rfile);
+					try {
+						RFile rfile = new RFile(0, op.getFileName(), op.getFileContent());
+						client.writeFile(rfile);
+					}catch(Exception ouch) {
+						System.err.println("Could not complete write request: " + ouch.getMessage());
+						ouch.printStackTrace();
+					}
 				}
 				
 				try {

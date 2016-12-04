@@ -346,6 +346,12 @@ public class CoordinatorImpl implements Iface {
 
 				//Try to connect to this replica and read file
 				RFile file = client.readFromFile(filename);
+				if(file == null) {
+					SystemException sysEx = new SystemException();
+					sysEx.setMessage(Constants.NO_SUCH_FILE_ERR_MSG);
+					throw sysEx;
+				}
+				
 				return file;
 			}catch(Exception ouch) {
 				//If not able to connect, then try to connect to next replica
