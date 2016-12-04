@@ -1,4 +1,4 @@
-package com.my.twopc.coordinator.store;
+package com.my.twopc.entry.server;
 
 import java.net.InetAddress;
 import java.util.ArrayList;
@@ -10,6 +10,7 @@ import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TServerTransport;
 
+import com.my.twopc.coordinator.store.Coordinator;
 import com.my.twopc.coordinator.store.Coordinator.Iface;
 import com.my.twopc.coordinator.store.impl.CoordinatorImpl;
 import com.my.twopc.model.ReplicaInfo;

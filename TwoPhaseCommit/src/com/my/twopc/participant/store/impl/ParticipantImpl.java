@@ -129,7 +129,8 @@ public class ParticipantImpl implements Iface {
 			Coordinator.Client coordinator = new Coordinator.Client(protocol);
 
 			String decision = coordinator.getFinalVotingDecision(transactionId);
-			return PARTICIPANT_TRANS_STATUS.getEnum(decision);
+			if(decision != null)
+				return PARTICIPANT_TRANS_STATUS.getEnum(decision);
 
 		}catch(Exception oops) {
 			printError(oops, true);
