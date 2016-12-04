@@ -15,26 +15,27 @@ public class ParticipantServer {
 
 	public static void main(String[] args) {
 		//Check for valid arguments
-		if(args.length < 3) {
-			System.err.println("Invalid arguments!\n<PARTICIPANT_PORT_NO> <COORDINATOR_HOST_NAME> <COORDINATOR_PORT_NO>");
+		if(args.length < 4) {
+			System.err.println("Invalid arguments!\n<PARTICIPANT_NAME> <PARTICIPANT_PORT_NO> <COORDINATOR_HOST_NAME> <COORDINATOR_PORT_NO>");
 			System.exit(1);
 		}
 		
-		int myPortNo = Integer.parseInt(args[0]);
-		String coordHostname = args[1];
-		int coordPortno = Integer.parseInt(args[2]);
+		String name = args[0];
+		int myPortNo = Integer.parseInt(args[1]);
+		String coordHostname = args[2];
+		int coordPortno = Integer.parseInt(args[3]);
 		
-		startAndServe(coordHostname, coordPortno, myPortNo);
+		startAndServe(coordHostname, coordPortno, myPortNo, name);
 	}
 
-	private static void startAndServe(String coordHostname, int coordPortno, int myPortNo) {
+	private static void startAndServe(String coordHostname, int coordPortno, int myPortNo, String participantName) {
 		try {
 			//Create server socket
 			TServerSocket serverTransport = new TServerSocket(myPortNo);
 
 			//Initialize implementor object
 			//This implementor will recover any incomplete transactions from last crash
-			ParticipantImpl participantImpl = new ParticipantImpl(coordHostname, coordPortno);
+			ParticipantImpl participantImpl = new ParticipantImpl(coordHostname, coordPortno, participantName);
 
 			//Create processor object with above implementor
 			Participant.Processor<Iface> processor = new Participant.Processor<Participant.Iface>(participantImpl);

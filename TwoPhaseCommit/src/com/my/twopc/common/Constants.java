@@ -8,7 +8,8 @@ public class Constants {
 	 * 
 	 */
 	public static final String JDBC_CONNECTION = "org.sqlite.JDBC";
-	public static final String TWO_PC_DBNAME = "jdbc:sqlite:twophasecommit.db";
+	public static final String TWO_PC_DBNAME = "jdbc:sqlite:participanttwophasecommit";
+	public static final String COORD_TWO_PC_DBNAME = "jdbc:sqlite:coordinatortwophasecommit.db";
 	
 	/**
 	 * Coordinator related queries

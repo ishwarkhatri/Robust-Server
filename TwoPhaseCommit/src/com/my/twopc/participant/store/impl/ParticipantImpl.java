@@ -37,6 +37,7 @@ public class ParticipantImpl implements Iface {
 	private boolean isConnectionAvailable = true;
 	private Lock connectionLock = new ReentrantLock();
 	private Condition connectionCondition = connectionLock.newCondition();
+	private String participantName;
 
 	//Variables related to file locking
 	private Lock fileLock = new ReentrantLock();
@@ -48,9 +49,10 @@ public class ParticipantImpl implements Iface {
 	private String coordinatorHostName;
 	private int coordinatorPortNumber;
 
-	public ParticipantImpl(String coordHostname, int coordPort) {
+	public ParticipantImpl(String coordHostname, int coordPort, String name) {
 		coordinatorHostName = coordHostname;
 		coordinatorPortNumber = coordPort;
+		participantName = name;
 		initParticipant();
 	}
 
@@ -185,7 +187,7 @@ public class ParticipantImpl implements Iface {
 	private void createOpenSqlDb() {
 		try {
 			Class.forName(Constants.JDBC_CONNECTION);
-			connection = DriverManager.getConnection(Constants.TWO_PC_DBNAME);
+			connection = DriverManager.getConnection(Constants.TWO_PC_DBNAME + "_" + participantName + ".db");
 			connection.setAutoCommit(false);
 		}catch(Exception oops) {
 			printError(oops, true);
