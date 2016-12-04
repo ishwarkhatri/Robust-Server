@@ -416,10 +416,25 @@ public class ParticipantImpl implements Iface {
 			}
 			connection.commit();
 
-			PreparedStatement psWrite = connection.prepareStatement(Constants.PARTICIPANT_PR_INSERT_QUERY);
-			psWrite.setString(1, fileName);
-			psWrite.setString(2, content);
-			psWrite.executeUpdate();
+			psRead = connection.prepareStatement(Constants.PARTICIPANT_PR_TABLE_READ_QUERY);
+			psRead.setString(1, fileName);
+			rs = psRead.executeQuery();
+			
+			PreparedStatement psWrite;
+			//Overwrite content if file exists
+			if(rs.next()) {
+				psWrite = connection.prepareStatement(Constants.PARTICIPANT_PR_UPDATE_QUERY);
+				psWrite.setString(1, content);
+				psWrite.setString(2, fileName);
+				psWrite.executeUpdate();
+			}
+			else { //Else insert new entry
+				psWrite = connection.prepareStatement(Constants.PARTICIPANT_PR_INSERT_QUERY);
+				psWrite.setString(1, fileName);
+				psWrite.setString(2, content);
+				psWrite.executeUpdate();
+			}
+
 			connection.commit();
 
 			//Update status for tid in TEMP table to COMMITTED

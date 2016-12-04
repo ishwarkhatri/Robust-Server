@@ -347,8 +347,11 @@ public class CoordinatorImpl implements Iface {
 				//Try to connect to this replica and read file
 				RFile file = client.readFromFile(filename);
 				return file;
-			}catch(Exception e) {
+			}catch(Exception ouch) {
 				//If not able to connect, then try to connect to next replica
+				System.err.println("Could not connect to participant " + replica.getHostname() + ": " + ouch.getMessage());
+				ouch.printStackTrace();
+				System.err.println("Will try connecting others...");
 			}
 		}
 
