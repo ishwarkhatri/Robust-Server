@@ -1,5 +1,6 @@
 package com.my.twopc.entry.server;
 
+import java.io.File;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.List;
@@ -8,7 +9,6 @@ import java.util.Scanner;
 import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
-import org.apache.thrift.transport.TServerTransport;
 
 import com.my.twopc.coordinator.store.Coordinator;
 import com.my.twopc.coordinator.store.Coordinator.Iface;
@@ -17,18 +17,16 @@ import com.my.twopc.model.ReplicaInfo;
 
 public class CoordinatorServer {
 
-    private static final int NUM_REPLICAS = 3;
-
     public static void main(String[] args) {
-    	if(args.length == 0) {
-    		System.err.println("Invalid arguments!\nEnter port number");
+    	if(args.length < 2) {
+    		System.err.println("Invalid arguments!\n<PORT_NO> <REPLICA_FILE>");
     		System.exit(1);
     	}
     	
     	int serverPort = Integer.parseInt(args[0]);
 
         // Get hostname and port number from user
-        List<ReplicaInfo> participantList = getReplicaInfoFromUser();
+        List<ReplicaInfo> participantList = getReplicaInfoFromUser(args[1]);
 
         try {
         	CoordinatorImpl handler = new CoordinatorImpl(participantList);
@@ -49,28 +47,21 @@ public class CoordinatorServer {
 
     }
 
-    private static List<ReplicaInfo> getReplicaInfoFromUser() {
-    	Scanner sc = new Scanner(System.in);
-        ReplicaInfo replica;
-        String hostname;
-        int portNumber;
-        List<ReplicaInfo> participantList = new ArrayList<>();
+    private static List<ReplicaInfo> getReplicaInfoFromUser(String replicaInfoFile) {
+    	List<ReplicaInfo> participantList = new ArrayList<>();
+    	try {
+    		Scanner sc = new Scanner(new File(replicaInfoFile));
+    		while(sc.hasNextLine()) {
+    			String tokens[] = sc.nextLine().split(" ");
+    			participantList.add(new ReplicaInfo(tokens[0], Integer.parseInt(tokens[1])));
+    		}
 
-        System.out.println("Please enter details for the 3 participants.");
-        for (int i = 0; i < NUM_REPLICAS; i++) {
-        	System.out.println("Enter hostname and port number for participant " + (i + 1));
-        	System.out.print("Host name: ");
-            hostname = sc.nextLine();
-            
-            System.out.print("Port no.: ");
-            portNumber = Integer.parseInt(sc.nextLine());
-
-            replica = new ReplicaInfo(hostname, portNumber);
-            participantList.add(replica);
-
-        }
-        
-        sc.close();
+    		sc.close();
+    	}catch(Exception ouch) {
+    		System.err.println("Could not read participant file: " + ouch.getMessage());
+    		ouch.printStackTrace();
+    		System.exit(1);
+    	}
 
         return participantList;
     }
