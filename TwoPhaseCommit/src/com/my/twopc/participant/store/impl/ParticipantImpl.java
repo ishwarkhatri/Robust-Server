@@ -15,6 +15,10 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.thrift.TException;
+import org.apache.thrift.protocol.TBinaryProtocol;
+import org.apache.thrift.protocol.TProtocol;
+import org.apache.thrift.transport.TSocket;
+import org.apache.thrift.transport.TTransport;
 
 import com.my.twopc.common.Constants;
 import com.my.twopc.custom.exception.SystemException;
@@ -23,6 +27,7 @@ import com.my.twopc.model.RFile;
 import com.my.twopc.model.Status;
 import com.my.twopc.model.StatusReport;
 import com.my.twopc.model.TempTableDTO;
+import com.my.twopc.participant.store.Participant;
 import com.my.twopc.participant.store.Participant.Iface;
 
 public class ParticipantImpl implements Iface {
@@ -94,18 +99,38 @@ public class ParticipantImpl implements Iface {
 		}
 	}
 
+	// Abort file write operation
 	private void abortFile(RFile rFile) {
-		// TODO Abort file write operation
-		
+		try {
+			abort(rFile.getTid());
+		} catch (Exception ouch) {
+			printError(ouch, true);
+		}
 	}
 
+	// Commit file to Permanent table
 	private void commitFile(RFile rFile) {
-		// TODO Commit file to Permanent table
-		
+		try {
+			commit(rFile.getTid());
+		} catch (Exception ouch) {
+			printError(ouch, true);
+		}
 	}
 
 	private PARTICIPANT_TRANS_STATUS getVotingDecisionFor(int transactionId) {
-		// TODO Get voting decision from Coordinator for a given transaction id
+		//Get voting decision from Coordinator for a given transaction id
+		try {
+			//Connect to the coordinator
+			TTransport transport = new TSocket(coordinatorHostName, coordinatorPortNumber);
+			transport.open();
+
+			TProtocol protocol = new TBinaryProtocol(transport);
+			Participant.Client coordinator = new Participant.Client(protocol);
+
+			//coordinator.
+		}catch(Exception oops) {
+			printError(oops, true);
+		}
 		return null;
 	}
 
