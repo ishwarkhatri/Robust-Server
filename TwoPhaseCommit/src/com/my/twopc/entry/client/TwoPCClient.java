@@ -14,7 +14,6 @@ import org.apache.thrift.transport.TTransport;
 import com.my.twopc.coordinator.store.Coordinator;
 import com.my.twopc.model.Operation;
 import com.my.twopc.model.RFile;
-import com.my.twopc.participant.store.Participant;
 
 public class TwoPCClient {
 	private static final String OPERATION_FILE = "operations.txt";

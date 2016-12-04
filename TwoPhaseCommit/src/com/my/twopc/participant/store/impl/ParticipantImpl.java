@@ -186,6 +186,7 @@ public class ParticipantImpl implements Iface {
 		try {
 			Class.forName(Constants.JDBC_CONNECTION);
 			connection = DriverManager.getConnection(Constants.TWO_PC_DBNAME);
+			connection.setAutoCommit(false);
 		}catch(Exception oops) {
 			printError(oops, true);
 		}
