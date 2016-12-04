@@ -1,0 +1,11 @@
+write,file2,This is file2 content
+read,file1.txt,null
+write,file1,File1 contents
+read,file2.txt,null
+read,file1.txt,null
+write,file3.txt,This project demonstrates two phase commit
+write,file4.txt,This file contains operations to be performed
+read,file4.txt,null
+read,file2.txt,null
+write,file2.txt,Changed contents of file2
+read,file2.txt,null
