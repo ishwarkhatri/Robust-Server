@@ -24,8 +24,15 @@ public class CoordinatorImpl implements Iface {
 	private boolean isConnectionAvailable = true;
 	private Lock connectionLock = new ReentrantLock();
 	private Condition condition = connectionLock.newCondition();
+	private boolean isExitBeforeVoting;
+	private boolean isExitAfterVoting;
 
-	public CoordinatorImpl(List<ReplicaInfo> replicaList) {
+	public CoordinatorImpl(List<ReplicaInfo> replicaList, String testNo) {
+		if("TEST3".equalsIgnoreCase(testNo)) {
+    		isExitBeforeVoting = true;
+    	} else if("TEST4".equalsIgnoreCase(testNo)) {
+    		isExitAfterVoting = true;
+    	}
 		participantList = replicaList;
 		//Initialize the state of co-ordinator
 		//Recover from failure if any, check for incomplete requests
@@ -56,56 +63,77 @@ public class CoordinatorImpl implements Iface {
 
 				// Create RFile from table
 				RFile rFile = new RFile();
+				rFile.setTid(rs.getInt("TID"));
 				rFile.setFilename(rs.getString("FILE_NAME"));
 				rFile.setContent(rs.getString("FILE_CONTENT"));
 
 				COOD_TRANS_STATUS finalDecision;
 
+				System.out.println("Incomplete transaction with status '" + status + "', name '" + rFile.getFilename() + "' and content '" + rFile.getContent() + "'");
 				//Switch case based on status
 				switch (status) {
 					case "INCOMING":
-						//Send write request to all replicas/participants
-						sendWriteRequestToParticipants(rFile);
+						//Ask participants to release lock if acquired
+						//sendReleaseLockRequests(rFile);
 
+						//Send write request to all replicas/participants
+						//sendWriteRequestToParticipants(rFile);
+
+						//Wait for completion of all write requests
+//						try {
+//							Thread.sleep(3000);
+//						}catch(InterruptedException ie){}
+						
 						//Update the transaction status from INCOMING to VOTING_STARTED
 						updateTransaction(rFile.getTid(), Constants.COOD_TRANS_UPDATE_STATUS_QUERY, COOD_TRANS_STATUS.VOTING_STARTED);
 
 						//Do voting
+						System.out.println("Starting revote...");
 						finalDecision = getDecisionVotesFromParticipants(rFile.getTid());
 
 						//Update final decision either COMMIT or ABORT
+						System.out.println("Final decision: " + finalDecision.getValue());
 						updateTransaction(rFile.getTid(), Constants.COOD_TRANS_UPDATE_DECISION_QUERY, finalDecision);
 
 						//Based on voting results send COMMIT/ABORT
+						System.out.println("Sending " + finalDecision.getValue() + " to all participants");
 						sendFinalDecisionToAllParticipants(rFile.getTid(), finalDecision);
 
 						//Update final voting result in transaction table
+						System.out.println("Marking request as Completed");
 						updateTransaction(rFile.getTid(), Constants.COOD_TRANS_UPDATE_STATUS_QUERY, COOD_TRANS_STATUS.REQUEST_PROCESSED);
 
 						break;
 
 					case "VOTING_STARTED":
 						//Do voting
+						System.out.println("Starting revote...");
 						finalDecision = getDecisionVotesFromParticipants(rFile.getTid());
 
 						//Update final decision either COMMIT or ABORT
+						System.out.println("Final decision: " + finalDecision.getValue());
 						updateTransaction(rFile.getTid(), Constants.COOD_TRANS_UPDATE_DECISION_QUERY, finalDecision);
 
 						//Based on voting results send COMMIT/ABORT
+						System.out.println("Sending " + finalDecision.getValue() + " to all participants");
 						sendFinalDecisionToAllParticipants(rFile.getTid(), finalDecision);
 
 						//Update final voting result in transaction table
+						System.out.println("Marking request as Completed");
 						updateTransaction(rFile.getTid(), Constants.COOD_TRANS_UPDATE_STATUS_QUERY, COOD_TRANS_STATUS.REQUEST_PROCESSED);
 						break;
 
 					case "COMMITTED":
 					case "ABORTED":
 						finalDecision = COOD_TRANS_STATUS.getEnum(rs.getString("FINAL_DECISION"));
-
+						System.out.println("Final decision: " + finalDecision.getValue());
+						
 						//Based on voting results send COMMIT/ABORT
+						System.out.println("Sending " + finalDecision.getValue() + " to all participants");
 						sendFinalDecisionToAllParticipants(rFile.getTid(), finalDecision);
 
 						//Update final voting result in transaction table
+						System.out.println("Marking request as Completed");
 						updateTransaction(rFile.getTid(), Constants.COOD_TRANS_UPDATE_STATUS_QUERY, COOD_TRANS_STATUS.REQUEST_PROCESSED);
 
 						break;
@@ -114,6 +142,26 @@ public class CoordinatorImpl implements Iface {
 			statement.close();
 		}catch(Exception oops) {
 			printError(oops, true);
+		}
+	}
+
+	private void sendReleaseLockRequests(RFile rFile) {
+		for(ReplicaInfo replica : participantList) {
+			try {
+				//Connect to the participant
+				TTransport transport = new TSocket(replica.getHostname(), replica.getPortno());
+				transport.open();
+				
+				TProtocol protocol = new TBinaryProtocol(transport);
+				Participant.Client client = new Participant.Client(protocol);
+
+				//Send release lock request to participant
+				client.releaseLock(rFile.getFilename());
+
+			}catch(Exception oops) {
+				System.err.println("Error while sending write request");
+				printError(oops, false);
+			}
 		}
 	}
 
@@ -142,24 +190,44 @@ public class CoordinatorImpl implements Iface {
 	@Override
 	public StatusReport writeFile(RFile rFile) throws SystemException, TException {
 		//Log incoming request in transaction table with status as INCOMING
+		System.out.println("Write request received for '" + rFile.getFilename() + "' contents '" + rFile.getContent() + "'");
+		
 		createTransactionEntry(rFile);
 
 		//Send write request to all replicas/participants
+		System.out.println("Sending write request to all participants");
 		sendWriteRequestToParticipants(rFile);
+
+		try {
+			System.out.println("Waiting for completion of all write requests");
+			Thread.sleep(3000);
+		} catch (InterruptedException e) {}
+
+		if(isExitBeforeVoting) {
+			System.exit(1);
+		}
 
 		//Update the transaction status from INCOMING to VOTING_STARTED
 		updateTransaction(rFile.getTid(), Constants.COOD_TRANS_UPDATE_STATUS_QUERY, COOD_TRANS_STATUS.VOTING_STARTED);
 
 		//Do voting
+		System.out.println("Starting voting");
 		COOD_TRANS_STATUS finalDecision = getDecisionVotesFromParticipants(rFile.getTid());
 
+		if(isExitAfterVoting) {
+			System.exit(1);
+		}
+
 		//Update final decision either COMMIT or ABORT 
+		System.out.println("Updating final decision for file: " + rFile.getFilename() + ": " + finalDecision.getValue());
 		updateTransaction(rFile.getTid(), Constants.COOD_TRANS_UPDATE_DECISION_QUERY, finalDecision);
 
 		//Based on voting results send COMMIT/ABORT
+		System.out.println("Sending final decision to all participants");
 		sendFinalDecisionToAllParticipants(rFile.getTid(), finalDecision);
 
 		//Update final voting result in transaction table
+		System.out.println("Marking request as processed");
 		updateTransaction(rFile.getTid(), Constants.COOD_TRANS_UPDATE_STATUS_QUERY, COOD_TRANS_STATUS.REQUEST_PROCESSED);
 
 		if(finalDecision == COOD_TRANS_STATUS.COMMITTED)
@@ -192,7 +260,7 @@ public class CoordinatorImpl implements Iface {
 							client.commit(tId);
 
 					}catch(Exception oops) {
-						printError(oops, true);
+						printError(oops, false);
 					}
 				}
 			}).start();
@@ -285,9 +353,12 @@ public class CoordinatorImpl implements Iface {
 						Participant.Client client = new Participant.Client(protocol);
 
 						//Send write request to participant
+						System.out.println("Sending write request to " + replica.getHostname() + " file: " + rFile.getFilename());
 						client.writeToFile(rFile);
-						
+						System.out.println("Request sent successfully");
+
 					}catch(Exception oops) {
+						System.err.println("Error while sending write request");
 						printError(oops, false);
 					}
 				}
@@ -336,28 +407,30 @@ public class CoordinatorImpl implements Iface {
 	@Override
 	public RFile readFile(String filename) throws SystemException, TException {
 		for(ReplicaInfo replica : participantList) {
+			TTransport transport;
 			try {
 				//Connect to the participant
-				TTransport transport = new TSocket(replica.getHostname(), replica.getPortno());
+				transport = new TSocket(replica.getHostname(), replica.getPortno());
 				transport.open();
 				
-				TProtocol protocol = new TBinaryProtocol(transport);
-				Participant.Client client = new Participant.Client(protocol);
-
-				//Try to connect to this replica and read file
-				RFile file = client.readFromFile(filename);
-				if(file == null) {
-					SystemException sysEx = new SystemException();
-					sysEx.setMessage(Constants.NO_SUCH_FILE_ERR_MSG);
-					throw sysEx;
-				}
-				
-				return file;
 			}catch(Exception ouch) {
 				//If not able to connect, then try to connect to next replica
 				System.err.println("Could not connect to participant " + replica.getHostname() + ": " + ouch.getMessage());
 				ouch.printStackTrace();
 				System.err.println("Will try connecting others...");
+				continue;
+			}
+
+			TProtocol protocol = new TBinaryProtocol(transport);
+			Participant.Client client = new Participant.Client(protocol);
+
+			//Try to connect to this replica and read file
+			try {
+				RFile file = client.readFromFile(filename);
+				return file;
+			}catch(SystemException ouch) {
+				System.err.println(ouch.getMessage());
+				throw ouch;
 			}
 		}
 

@@ -14,7 +14,8 @@ public enum PARTICIPANT_TRANS_STATUS {
     }
 
     public static PARTICIPANT_TRANS_STATUS getEnum(String name) {
-        switch(name) {
+        if(name != null)
+    	switch(name) {
             case "INCOMING":
                 return PARTICIPANT_TRANS_STATUS.INCOMING;
 

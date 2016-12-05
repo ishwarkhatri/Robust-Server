@@ -1,3 +1,2 @@
-remote01.cs.binghamton.edu 8989
-remote02.cs.binghamton.edu 8989
-remote03.cs.binghamton.edu 8989
+localhost 9091
+localhost 9092

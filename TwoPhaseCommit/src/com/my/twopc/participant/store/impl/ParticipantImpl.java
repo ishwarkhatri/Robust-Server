@@ -48,11 +48,14 @@ public class ParticipantImpl implements Iface {
 	//Coordinator hostname & port
 	private String coordinatorHostName;
 	private int coordinatorPortNumber;
+	private boolean isTestingOn;
 
-	public ParticipantImpl(String coordHostname, int coordPort, String name) {
+
+	public ParticipantImpl(String coordHostname, int coordPort, String name, boolean isTest) {
 		coordinatorHostName = coordHostname;
 		coordinatorPortNumber = coordPort;
 		participantName = name;
+		isTestingOn = isTest;
 		initParticipant();
 	}
 
@@ -76,26 +79,30 @@ public class ParticipantImpl implements Iface {
 		//For each record
 		for(TempTableDTO transaction : incompleteTransactionList) {
 			RFile rFile = new RFile(transaction.getTransactionId(), transaction.getFileName(), transaction.getFileContent());
+			System.out.println("Incomplete transaction with status: " + transaction.getParticipantStatus().getValue());
 			//If status == READY
 			if(transaction.getParticipantStatus() == PARTICIPANT_TRANS_STATUS.READY) {
+				System.out.println("Getting voting decision from coordinator");
 				//1. GET VOTING decision from Coordinator
 				PARTICIPANT_TRANS_STATUS votingDecision = getVotingDecisionFor(transaction.getTransactionId());
 
 				//2. IF voting decision was COMMITTED
 				if(votingDecision == PARTICIPANT_TRANS_STATUS.COMMITTED) {
-					
+					System.out.println("Final decision was COMMIT. Committing file...");
 					//	Then copy file name and content in PERMENANT table
 					//	And update FINAL_STATUS to COMMITTED and MY_STATUS to READY
 					commitFile(rFile);
 				}
 				else { 
 					//	 Else update FINAL_STATUS in TEMP table to ABORTED
+					System.out.println("Final decision was ABORT. Aborting...");
 					abortFile(rFile);
 				}
 			}
 			//Else If status == FAILURE
 			else if(transaction.getParticipantStatus() == PARTICIPANT_TRANS_STATUS.FAILURE) {
 				//Update final decision in TEMP table to ABORTED
+				System.out.println("Final decision was ABORT. Aborting...");
 				abortFile(rFile);
 			}
 		}
@@ -161,7 +168,7 @@ public class ParticipantImpl implements Iface {
 				incompleteTransactions.add(tempTableDTO);
 			}
 		} catch (SQLException oops) {
-
+			
 		}finally {
 			connectionLock.unlock();
 		}
@@ -198,7 +205,10 @@ public class ParticipantImpl implements Iface {
 	public StatusReport writeToFile(RFile rFile) throws SystemException, TException {
 		StatusReport statusRep = new StatusReport(Status.SUCCESSFUL);
 
+		System.out.println("Write request received for '" + rFile.getFilename() + "' contents '" + rFile.getContent() + "'");
+
 		if(isFileLocked(rFile.getFilename())) {
+			System.out.println("File '" + rFile.getFilename() + "' with contents '" + rFile.getContent() + "' is locked");
 			//Add entry in TEMP table with PARTICIPANT status as ABORTED
 			statusRep.setStatus(Status.FAILED);
 			statusRep.setMessage("File is locked or being used by another client");
@@ -231,8 +241,15 @@ public class ParticipantImpl implements Iface {
 				connectionLock.unlock();
 			}
 		} else {
+			System.out.println("Acquiring lock.");
 			//Acquire lock
 			boolean isLockAcquired = getLockOnFile(rFile.getFilename());
+			System.out.println("Lock acquired on '" + rFile.getFilename() + "' contents '" + rFile.getContent() + "'");
+
+			//Sleep for sometime
+			try {
+				Thread.sleep(1500);
+			} catch (InterruptedException e) {}
 
 			//Copy file content to TEMP table
 			connectionLock.lock();
@@ -272,6 +289,7 @@ public class ParticipantImpl implements Iface {
 
 				isConnectionAvailable = true;
 				connectionCondition.signal();
+				System.out.println("Write request completed successfully");
 			} catch (SQLException oops) {
 				System.err.println(oops.getMessage());
 				oops.printStackTrace();
@@ -337,7 +355,9 @@ public class ParticipantImpl implements Iface {
 	@Override
 	public RFile readFromFile(String filename) throws SystemException, TException {
 		//Read the contents of file with name <filename> and return to Co-ordinator
+		System.out.println("Read request for file: " + filename);
 		RFile requestedFile = null;
+		boolean throwFileNotFound = false;
 		try {
 			PreparedStatement ps = connection.prepareStatement(Constants.PARTICIPANT_PR_TABLE_READ_QUERY);
 			ps.setString(1, filename);
@@ -347,11 +367,21 @@ public class ParticipantImpl implements Iface {
 				requestedFile = new RFile();
 				requestedFile.setFilename(filename);
 				requestedFile.setContent(rs.getString("FILE_CONTENT"));
+				System.out.println("File contents: " + requestedFile.getContent());
+			} else {
+				System.out.println(filename + " file does not exists");
+				throwFileNotFound = true;
 			}
 		}catch(Exception oops) {
 			System.err.println("Could not complete read request for file: " + filename);
 			oops.printStackTrace();
 			throw new SystemException();
+		}
+		
+		if(throwFileNotFound) {
+			SystemException sysEx = new SystemException();
+			sysEx.setMessage(Constants.NO_SUCH_FILE_ERR_MSG);
+			throw sysEx;
 		}
 		return requestedFile;
 	}
@@ -396,6 +426,9 @@ public class ParticipantImpl implements Iface {
 		String fileName = "";
 		String content = "";
 
+		if(isTestingOn) {
+			System.exit(1);
+		}
 		// Acquire lock on file
 		connectionLock.lock();
 
@@ -403,7 +436,7 @@ public class ParticipantImpl implements Iface {
 			while (!isConnectionAvailable)
 				connectionCondition.await();
 
-			isConnectionAvailable = true;
+			isConnectionAvailable = false;
 			//First move file name and content from TEMP table to PERMEMANT table
 			PreparedStatement psRead = connection.prepareStatement(Constants.PARTICIPANT_TMP_TABLE_READ_QUERY);
 			psRead.setInt(1, tid);
@@ -441,8 +474,8 @@ public class ParticipantImpl implements Iface {
 					
 					//Update status for tid in TEMP table to COMMITTED
 					PreparedStatement ps = connection.prepareStatement(Constants.PARTICIPANT_TMP_FINAL_STATUS_UPDATE_QUERY);
-					ps.setInt(1, tid);
-					
+					ps.setString(1, PARTICIPANT_TRANS_STATUS.COMMITTED.getValue());
+					ps.setInt(2, tid);
 					ps.executeUpdate();
 					connection.commit();
 					
@@ -470,6 +503,9 @@ public class ParticipantImpl implements Iface {
 
 	@Override
 	public boolean abort(int tid) throws SystemException, TException {
+		if(isTestingOn) {
+			System.exit(1);
+		}
 		connectionLock.lock();
 		boolean isSuccessful = false;
 		boolean isCommitted = false;

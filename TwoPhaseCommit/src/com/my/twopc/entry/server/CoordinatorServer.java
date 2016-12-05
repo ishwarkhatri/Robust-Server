@@ -28,12 +28,17 @@ public class CoordinatorServer {
         // Get hostname and port number from user
         List<ReplicaInfo> participantList = getReplicaInfoFromUser(args[1]);
 
+        String testNum = null;
+        if(args.length >= 3) {
+        	testNum = args[2];
+        }
         try {
-        	CoordinatorImpl handler = new CoordinatorImpl(participantList);
+        	CoordinatorImpl handler = new CoordinatorImpl(participantList, testNum);
             Coordinator.Processor<Iface> processor = new Coordinator.Processor<Iface>(handler);
 
             Runnable simple = new Runnable() {
                 public void run() {
+                	System.out.println("Starting Coordinator server");
                     simple(processor, serverPort);
                 }
             };

@@ -24,18 +24,22 @@ public class ParticipantServer {
 		int myPortNo = Integer.parseInt(args[1]);
 		String coordHostname = args[2];
 		int coordPortno = Integer.parseInt(args[3]);
-		
-		startAndServe(coordHostname, coordPortno, myPortNo, name);
+		boolean isTest = false;
+		if(args.length > 4) {
+			isTest = true;
+		}
+
+		startAndServe(coordHostname, coordPortno, myPortNo, name, isTest);
 	}
 
-	private static void startAndServe(String coordHostname, int coordPortno, int myPortNo, String participantName) {
+	private static void startAndServe(String coordHostname, int coordPortno, int myPortNo, String participantName, boolean isTest) {
 		try {
 			//Create server socket
 			TServerSocket serverTransport = new TServerSocket(myPortNo);
 
 			//Initialize implementor object
 			//This implementor will recover any incomplete transactions from last crash
-			ParticipantImpl participantImpl = new ParticipantImpl(coordHostname, coordPortno, participantName);
+			ParticipantImpl participantImpl = new ParticipantImpl(coordHostname, coordPortno, participantName, isTest);
 
 			//Create processor object with above implementor
 			Participant.Processor<Iface> processor = new Participant.Processor<Participant.Iface>(participantImpl);

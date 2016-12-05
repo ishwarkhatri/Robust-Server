@@ -6,14 +6,19 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
+import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
+import org.apache.thrift.transport.TTransportException;
 
 import com.my.twopc.coordinator.store.Coordinator;
+import com.my.twopc.custom.exception.SystemException;
 import com.my.twopc.model.Operation;
 import com.my.twopc.model.RFile;
+import com.my.twopc.model.Status;
+import com.my.twopc.model.StatusReport;
 
 public class TwoPCClient {
 	private static final String OPERATION_FILE = "operations.txt";
@@ -36,42 +41,58 @@ public class TwoPCClient {
 			//Read operations file
 			List<Operation> operationList = readOperationFile();
 
-			//Connect to the participant
-			TTransport transport = new TSocket(coordHostname, coordPortno);
-			transport.open();
-
-			TProtocol protocol = new TBinaryProtocol(transport);
-			Coordinator.Client client = new Coordinator.Client(protocol);
 
 			for(int i = 0; i < operationList.size(); i++) {
 				Operation op = operationList.get(i);
-				if("read".equalsIgnoreCase(op.getOperationType())) {
-					System.out.println("Reading from file: " + op.getFileName());
-					try {
-						RFile rfile = client.readFile(op.getFileName());
-						System.out.println("Results: " + rfile.getContent());
-					}catch(Exception ouch) {
-						System.err.println("Could not complete read request: " + ouch.getMessage());
-						ouch.printStackTrace();
+				new Thread(new Runnable() {
+					
+					@Override
+					public void run() {
+						//Connect to the participant
+						TTransport transport = new TSocket(coordHostname, coordPortno);
+						try {
+							transport.open();
+						} catch (TTransportException e) {
+							e.printStackTrace();
+						}
+						
+						TProtocol protocol = new TBinaryProtocol(transport);
+						Coordinator.Client client = new Coordinator.Client(protocol);
+						if("read".equalsIgnoreCase(op.getOperationType())) {
+							System.out.println("Reading from file: " + op.getFileName());
+							try {
+								RFile rfile = client.readFile(op.getFileName());
+								System.out.println("Results: " + rfile.getContent());
+							}catch(SystemException ouch) {
+								System.err.println("Could not complete read request: " + ouch.getMessage());
+							} catch (TException e) {
+								System.err.println("Unknown exception: " + e.getMessage());
+								e.printStackTrace();
+							}
+						}
+						else if("write".equalsIgnoreCase(op.getOperationType())) {
+							System.out.println("Writing data to file '" + op.getFileName() + "' contents '" + op.getFileContent() + "'\n");
+							try {
+								RFile rfile = new RFile(0, op.getFileName(), op.getFileContent());
+								StatusReport report = client.writeFile(rfile);
+								if(report.getStatus() == Status.SUCCESSFUL) {
+									System.out.println("Write request was successfull");
+								} else {
+									System.err.println("Write request failed: " + report.getMessage());
+								}
+							}catch(SystemException ouch) {
+								System.err.println("Could not complete write request: " + ouch.getMessage());
+								ouch.printStackTrace();
+							} catch (TException e) {
+								System.err.println("Unknown exception: " + e.getMessage());
+								e.printStackTrace();
+							}
+							
+						}
+						transport.close();
 					}
-				}
-				else if("write".equalsIgnoreCase(op.getOperationType())) {
-					System.out.println("Writing data to file '" + op.getFileName() + "' contents '" + op.getFileContent() + "'\n");
-					try {
-						RFile rfile = new RFile(0, op.getFileName(), op.getFileContent());
-						client.writeFile(rfile);
-					}catch(Exception ouch) {
-						System.err.println("Could not complete write request: " + ouch.getMessage());
-						ouch.printStackTrace();
-					}
-				}
-				
-				try {
-					Thread.sleep(1000);
-				}catch(InterruptedException ie) {}
+				}).start();
 			}
-			
-			transport.close();
 			
 		}catch(Exception ouch) {
 			System.err.println("Could not send request to coordinator: " + ouch.getMessage());
