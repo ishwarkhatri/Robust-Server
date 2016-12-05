@@ -1,5 +1,5 @@
 write,file2.txt,This is file2 content
-write,file1,File1 contents
+write,file1.txt,File1 contents
 write,file3.txt,This project demonstrates two phase commit
 write,file4.txt,This file contains operations to be performed
 write,file2.txt,Changed contents of file2

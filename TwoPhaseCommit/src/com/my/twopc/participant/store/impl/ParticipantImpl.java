@@ -409,49 +409,53 @@ public class ParticipantImpl implements Iface {
 			psRead.setInt(1, tid);
 
 			ResultSet rs = psRead.executeQuery();
+			//If the record is present in TMP table
 			if (rs.next()) {
-				fileName = rs.getString("FILE_NAME");
-				content = rs.getString("FILE_CONTENT");
+				String finalStatus = rs.getString("VOTING_STATUS");
+				if(finalStatus == null) {
+					
+					fileName = rs.getString("FILE_NAME");
+					content = rs.getString("FILE_CONTENT");
+					
+					//Check if the entry is present in PERMANENT table
+					psRead = connection.prepareStatement(Constants.PARTICIPANT_PR_TABLE_READ_QUERY);
+					psRead.setString(1, fileName);
+					rs = psRead.executeQuery();
+					
+					PreparedStatement psWrite;
+					//Overwrite content if file exists
+					if(rs.next()) {
+						psWrite = connection.prepareStatement(Constants.PARTICIPANT_PR_UPDATE_QUERY);
+						psWrite.setString(1, content);
+						psWrite.setString(2, fileName);
+						psWrite.executeUpdate();
+					}
+					else { //Else insert new entry
+						psWrite = connection.prepareStatement(Constants.PARTICIPANT_PR_INSERT_QUERY);
+						psWrite.setString(1, fileName);
+						psWrite.setString(2, content);
+						psWrite.executeUpdate();
+					}
+					
+					connection.commit();
+					
+					//Update status for tid in TEMP table to COMMITTED
+					PreparedStatement ps = connection.prepareStatement(Constants.PARTICIPANT_TMP_FINAL_STATUS_UPDATE_QUERY);
+					ps.setInt(1, tid);
+					
+					ps.executeUpdate();
+					connection.commit();
+					
+				}
+				
+				//Update the condition variable
+				isConnectionAvailable = true;
+
+				//Signal another waiting thread
+				connectionCondition.signal();
 			}
-			connection.commit();
-
-			psRead = connection.prepareStatement(Constants.PARTICIPANT_PR_TABLE_READ_QUERY);
-			psRead.setString(1, fileName);
-			rs = psRead.executeQuery();
-			
-			PreparedStatement psWrite;
-			//Overwrite content if file exists
-			if(rs.next()) {
-				psWrite = connection.prepareStatement(Constants.PARTICIPANT_PR_UPDATE_QUERY);
-				psWrite.setString(1, content);
-				psWrite.setString(2, fileName);
-				psWrite.executeUpdate();
-			}
-			else { //Else insert new entry
-				psWrite = connection.prepareStatement(Constants.PARTICIPANT_PR_INSERT_QUERY);
-				psWrite.setString(1, fileName);
-				psWrite.setString(2, content);
-				psWrite.executeUpdate();
-			}
-
-			connection.commit();
-
-			//Update status for tid in TEMP table to COMMITTED
-			PreparedStatement ps = connection.prepareStatement(Constants.PARTICIPANT_TMP_FINAL_STATUS_UPDATE_QUERY);
-			ps.setInt(1, tid);
-
-			ps.executeUpdate();
-			connection.commit();
-
-			//Update the condition variable
-			isConnectionAvailable = true;
-			//Signal another waiting thread
-			connectionCondition.signal();
-
-
 			//if above steps done successfully then return true
 			isCommitted = true;
-			//else return false
 		} catch (Exception oops) {
 			printError(oops, true);
 		}finally {
@@ -482,26 +486,27 @@ public class ParticipantImpl implements Iface {
 			PreparedStatement pst = connection.prepareStatement(Constants.PARTICIPANT_TMP_TABLE_READ_QUERY);
 			pst.setInt(1, tid);
 			ResultSet rs = pst.executeQuery();
+			
+			//Update only if record is present in database
 			if(rs.next()) {
 				rFile.setFilename(rs.getString("FILE_NAME"));
 				rFile.setContent(rs.getString("FILE_CONTENT"));
 				rFile.setTid(rs.getInt("TID"));
 				rs.close();
-				
+
 				//Update status for tid in TEMP table to ABORTED
 				pst = connection.prepareStatement(Constants.PARTICIPANT_TMP_FINAL_STATUS_UPDATE_QUERY);
 				pst.setString(1, PARTICIPANT_TRANS_STATUS.ABORTED.getValue());
 				pst.setInt(2, tid);
 				pst.executeUpdate();
 				connection.commit();
-				
-				isCommitted = true;
 			}
-			
+
+			isCommitted = true;
 			isConnectionAvailable = true;
 			connectionCondition.signal();
 		} catch (Exception oops) {
-			System.err.println(oops.getMessage());
+			printError(oops, true);
 		}finally {
 			connectionLock.unlock();
 		}
@@ -515,7 +520,6 @@ public class ParticipantImpl implements Iface {
 	}
 
 	public boolean releaseLock(String filename) {
-		boolean isLockReleased = false;
 		fileLock.lock();
 		try {
 			while(!isSetAvailable) {
@@ -526,9 +530,7 @@ public class ParticipantImpl implements Iface {
 			
 			isSetAvailable = false;
 			
-			if(lockedFileSet.remove(filename)) {
-				isLockReleased = true;
-			}
+			lockedFileSet.remove(filename);
 
 			isSetAvailable = true;
 			fileLockCondition.signal();
@@ -536,7 +538,7 @@ public class ParticipantImpl implements Iface {
 			fileLock.unlock();
 		}
 
-		return isLockReleased;
+		return true;
 	}
 
 	private void printError(Exception oops, boolean doExit) {

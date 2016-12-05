@@ -288,7 +288,7 @@ public class CoordinatorImpl implements Iface {
 						client.writeToFile(rFile);
 						
 					}catch(Exception oops) {
-						printError(oops, true);
+						printError(oops, false);
 					}
 				}
 			}).start();
